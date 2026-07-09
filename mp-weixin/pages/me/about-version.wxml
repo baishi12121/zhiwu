@@ -1,0 +1,8 @@
+<view class="placeholder-page">
+  <view class="placeholder-card" style="border-color:#7a7f8c">
+    <view class="placeholder-icon" style="background-color:#7a7f8c1F;color:#7a7f8c">版</view>
+    <text class="placeholder-title">版本信息</text>
+    <text class="placeholder-desc">查看当前小程序版本号、检测更新与许可协议。</text>
+    <view class="placeholder-btn" style="background-color:#7a7f8c" bindtap="goBack">返回上一页</view>
+  </view>
+</view>

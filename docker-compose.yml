@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: nacos
+    environment:
+      - MODE=standalone
+      - PREFER_HOST_MODE=hostname
+    ports:
+      - "8848:8848"
+      - "9848:9848"   # gRPC 客户端通信端口 (Nacos 2.x 必须)
+      - "9849:9849"   # gRPC 服务端通信端口
+    restart: unless-stopped
+
+  sentinel:
+    image: bladex/sentinel-dashboard:1.8.6
+    container_name: sentinel-dashboard
+    environment:
+      - SERVER_PORT=8858
+    ports:
+      - "8858:8858"
+#      - "8719:8719"
+    restart: unless-stopped

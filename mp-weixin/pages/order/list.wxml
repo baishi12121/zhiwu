@@ -1,0 +1,35 @@
+<view class="order-list-page">
+  <scroll-view scroll-x class="tab-bar" enhanced show-scrollbar="{{false}}">
+    <view wx:for="{{tabs}}" wx:key="status" class="tab-item {{item.status===activeStatus?'active':''}}" data-status="{{item.status}}" bindtap="selectTab">{{item.label}}</view>
+  </scroll-view>
+
+  <view wx:if="{{filteredOrders.length===0}}" class="empty">
+    <view class="placeholder-card" style="border-color:#ff8a63">
+      <view class="placeholder-icon" style="background-color:#ff8a631F;color:#ff8a63">📭</view>
+      <text class="placeholder-title">暂无相关订单</text>
+      <text class="placeholder-desc">切换其他状态或前往首页逛逛吧～</text>
+      <view class="placeholder-btn" style="background-color:#ff8a63" bindtap="goHome">去首页逛逛</view>
+    </view>
+  </view>
+
+  <view wx:else class="order-list">
+    <view wx:for="{{filteredOrders}}" wx:key="id" class="order-card">
+      <view class="order-head">
+        <text class="order-no">订单号：{{item.id}}</text>
+        <text class="order-status">{{statusLabels[item.status]||item.status}}</text>
+      </view>
+      <view class="order-body">
+        <view class="order-thumb" style="background-color:{{item.image}}"/>
+        <view class="order-info">
+          <text class="order-title">{{item.title}}</text>
+          <text class="order-spec">{{item.spec}}</text>
+          <text class="order-price">¥{{item.priceText}}</text>
+        </view>
+      </view>
+      <view class="order-foot">
+        <view wx:if="{{item.status==='unpaid'}}" class="primary-btn" data-id="{{item.id}}" bindtap="goPay">去支付</view>
+        <view wx:else class="ghost-btn">查看详情</view>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,1 @@
+"use strict";const n=require("../common/vendor.js"),c=require("./index.js"),u=require("./debounce.js"),t="/pages/login/index",a=u.debounce((o={})=>{const{mode:r="navigateTo",queryString:i=""}=o,e=`${t}${i}`;`/${c.getLastPage().route}`!==t&&(r==="navigateTo"?n.index.navigateTo({url:e}):n.index.reLaunch({url:e}))},500);exports.toLoginPage=a;

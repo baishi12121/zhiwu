@@ -1,0 +1,8 @@
+<view class="placeholder-page">
+  <view class="placeholder-card" style="border-color:#5cbf8a">
+    <view class="placeholder-icon" style="background-color:#5cbf8a1F;color:#5cbf8a">址</view>
+    <text class="placeholder-title">收货地址</text>
+    <text class="placeholder-desc">管理你的收货地址，支持新增、编辑与默认设置。</text>
+    <view class="placeholder-btn" style="background-color:#5cbf8a" bindtap="goBack">返回上一页</view>
+  </view>
+</view>

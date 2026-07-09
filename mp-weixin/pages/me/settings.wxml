@@ -1,0 +1,8 @@
+<view class="placeholder-page">
+  <view class="placeholder-card" style="border-color:#2bb1a8">
+    <view class="placeholder-icon" style="background-color:#2bb1a81F;color:#2bb1a8">设</view>
+    <text class="placeholder-title">通用设置</text>
+    <text class="placeholder-desc">消息提醒、隐私设置、清除缓存等配置项建设中。</text>
+    <view class="placeholder-btn" style="background-color:#2bb1a8" bindtap="goBack">返回上一页</view>
+  </view>
+</view>

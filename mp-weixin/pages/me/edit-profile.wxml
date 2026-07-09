@@ -1,0 +1,8 @@
+<view class="placeholder-page">
+  <view class="placeholder-card" style="border-color:#ff6a6b">
+    <view class="placeholder-icon" style="background-color:#ff6a6b1F;color:#ff6a6b">编</view>
+    <text class="placeholder-title">编辑资料</text>
+    <text class="placeholder-desc">修改头像、昵称、会员信息等功能稍后开放。</text>
+    <view class="placeholder-btn" style="background-color:#ff6a6b" bindtap="goBack">返回上一页</view>
+  </view>
+</view>
