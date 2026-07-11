@@ -1,22 +1,52 @@
 package com.hyf.mallproductservice.domain.repository;
 
-import com.hyf.mallproductservice.domain.model.entity.Product;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hyf.mallproductservice.infrastructure.persistence.dataobject.ProductDO;
+import com.hyf.mallproductservice.infrastructure.persistence.dataobject.ProductImageDO;
+import com.hyf.mallproductservice.infrastructure.persistence.dataobject.ProductPropertyDO;
+import com.hyf.mallproductservice.infrastructure.persistence.dataobject.ProductSkuDO;
+import com.hyf.mallproductservice.infrastructure.persistence.dataobject.SkuSpecValueDO;
+import com.hyf.mallproductservice.infrastructure.persistence.dataobject.SpecDO;
+import com.hyf.mallproductservice.infrastructure.persistence.dataobject.SpecValueDO;
+
+import java.util.List;
 
 /**
- * 商品仓储接口（domain 层定义，infrastructure 层实现）
+ * 商品仓储接口（domain 层定义，infrastructure 层实现）.
  *
  * @author hyf
  */
 public interface ProductRepository {
 
-    Product findById(Long id);
+    ProductDO findById(Long id);
 
-    /**
-     * 扣减库存（防超卖 SQL 兜底）。
-     *
-     * @param productId 商品 id
-     * @param count     扣减数量
-     * @return 实际影响行数，0 表示库存不足
-     */
+    /** 分页查询商品（支持筛选） */
+    Page<ProductDO> findPage(Page<ProductDO> page, Long categoryId, String keyword, String sort);
+
+    /** 根据商品ID查询主图 */
+    List<ProductImageDO> findMainImages(Long productId);
+
+    /** 根据商品ID查询详情图 */
+    List<ProductImageDO> findDetailImages(Long productId);
+
+    /** 查询商品详情属性 */
+    List<ProductPropertyDO> findProperties(Long productId);
+
+    /** 查询商品SKU列表 */
+    List<ProductSkuDO> findSkus(Long productId);
+
+    /** 查询商品规格组 */
+    List<SpecDO> findSpecs(Long productId);
+
+    /** 查询规格值 */
+    List<SpecValueDO> findSpecValues(Long specId);
+
+    /** 查询SKU关联的规格值 */
+    List<SkuSpecValueDO> findSkuSpecValues(Long skuId);
+
+    /** 查询同类商品（同分类，按销量排序） */
+    List<ProductDO> findSimilarProducts(Long categoryId, Long excludeProductId, int limit);
+
+    /** 扣减库存（防超卖 SQL 兜底） */
     int decreaseStock(Long productId, int count);
 }

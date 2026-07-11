@@ -42,5 +42,11 @@
             <version>1.2.83</version>
         </dependency>
 
+        <!-- Jackson annotations：PageResult @JsonProperty 别名 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
+
     </dependencies>
 </project>
