@@ -1,0 +1,44 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: mall-auth-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        register-enabled: true
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      database: 1
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.hyf.mallauthservice.entity
+  configuration:
+    map-underscore-to-camel-case: true
+
+# JWT / SaToken 配置
+mall:
+  jwt:
+    secret: zhiwu-mall-secret-change-me-20050729hyf-666
+    access-token-ttl: 1800s    # 30 分钟（必须加 s 后缀，纯数字会被 Spring Boot 解析为毫秒！）
+    refresh-token-ttl: 604800s # 7 天
+  security:
+    enabled: true
+    exclude-paths:
+      - /auth/**
+      - /error
+  wechat:
+    appid: wxfbea11012b0ef3ff
+    secret: 3b41582a9e5d7a182dc21612e73e3c24

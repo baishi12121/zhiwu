@@ -1,1 +1,0 @@
-"use strict";const e=require("../../common/vendor.js"),o={};Array||e.resolveComponent("layout-default-uni")();function t(n,_){return{a:e.gei(n,"")}}const r=e._export_sfc(o,[["render",t]]);wx.createPage(r);

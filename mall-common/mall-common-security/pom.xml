@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.hyf</groupId>
+        <artifactId>mall-common</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>mall-common-security</artifactId>
+    <name>mall-common-security</name>
+    <description>公共安全：JWT 签发/校验(jjwt) + SaToken 权限/角色鉴权 + Token 拦截器 + 登录上下文</description>
+
+    <dependencies>
+        <!-- 自身依赖 web（servlet 上下文、全局异常处理器已在此间接引入） -->
+        <dependency>
+            <groupId>com.hyf</groupId>
+            <artifactId>mall-common-web</artifactId>
+        </dependency>
+        <!-- mall-common-feign：拦截器写入 FeignAuthHolder，供 Feign 透传 token -->
+        <dependency>
+            <groupId>com.hyf</groupId>
+            <artifactId>mall-common-feign</artifactId>
+        </dependency>
+        <!-- Redis：token 黑名单校验 -->
+        <dependency>
+            <groupId>com.hyf</groupId>
+            <artifactId>mall-common-redis</artifactId>
+        </dependency>
+
+        <!-- ============ JWT：作为 token 签发/校验的核心 ============ -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ============ SaToken：负责权限/角色鉴权，不自管 token ============ -->
+        <!-- sa-token 核心 -->
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-core</artifactId>
+        </dependency>
+        <!-- jakarta servlet 适配：提供 SaRequestForServlet 等 -->
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-jakarta-servlet</artifactId>
+        </dependency>
+        <!-- Spring Boot3 自动装配：注册 SaBean/SaTokenContext 等 -->
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-spring-boot3-starter</artifactId>
+        </dependency>
+    </dependencies>
+</project>

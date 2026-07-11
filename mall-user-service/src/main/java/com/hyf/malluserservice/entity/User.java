@@ -1,90 +1,71 @@
 package com.hyf.malluserservice.entity;
 
-import lombok.AllArgsConstructor;
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.hyf.mallcommon.mybatis.entity.BaseEntity;
 import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.EqualsAndHashCode;
 
-import java.io.Serializable;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 用户实体类，对应数据库 user 表
+ * 用户主表实体，映射 {@code user} 表（mall-user-service 侧）。
+ *
+ * <p>仅用于用户资料读写，不涉及登录认证（登录归 mall-auth-service）。
+ *
+ * @author hyf
  */
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class User implements Serializable {
+@EqualsAndHashCode(callSuper = true)
+@TableName("user")
+public class User extends BaseEntity {
 
-    private static final long serialVersionUID = 1L;
+    /** 账号 */
+    private String account;
 
-    /**
-     * 用户ID
-     */
-    private Long id;
-
-    /**
-     * 用户名
-     */
-    private String username;
-
-    /**
-     * 昵称
-     */
+    /** 昵称 */
     private String nickname;
 
-    /**
-     * 加密后的密码
-     */
+    /** MD5 密文 */
     private String password;
 
-    /**
-     * 手机号
-     */
-    private String phone;
+    /** 手机号 */
+    private String mobile;
 
-    /**
-     * 头像URL
-     */
+    /** 头像 URL */
     private String avatar;
 
-    /**
-     * 性别：0未知 1男 2女
-     */
+    /** 性别：0 未知，1 男，2 女 */
     private Integer gender;
 
-    /**
-     * 账户余额（用于模拟下单扣款）
-     */
+    /** 生日 */
+    private LocalDate birthday;
+
+    /** 职业 */
+    private String profession;
+
+    /** 省份编码 */
+    private String provinceCode;
+
+    /** 城市编码 */
+    private String cityCode;
+
+    /** 区/县编码 */
+    private String countyCode;
+
+    /** 模拟余额 */
     private BigDecimal balance;
 
-    /**
-     * 会员等级：NORMAL/SILVER/GOLD/DIAMOND
-     */
+    /** 会员等级：NORMAL / SILVER / GOLD / DIAMOND */
     private String memberLevel;
 
-    /**
-     * 成长值
-     */
+    /** 成长值 */
     private Integer growth;
 
-    /**
-     * 帐号状态：0-禁用，1-正常
-     */
+    /** 状态：0 禁用，1 正常 */
     private Integer status;
 
-    /**
-     * 最近一次登录时间
-     */
+    /** 最后登录时间 */
     private LocalDateTime lastLoginAt;
-
-    /**
-     * 注册时间
-     */
-    private LocalDateTime createTime;
-
-    /**
-     * 更新时间
-     */
-    private LocalDateTime updateTime;
 }

@@ -1,155 +1,121 @@
 package com.hyf.malluserservice.controller;
 
-import com.hyf.malluserservice.common.Result;
-import com.hyf.malluserservice.entity.User;
+import com.hyf.mallcommon.core.result.Result;
+import com.hyf.mallcommon.oss.service.OssService;
+import com.hyf.malluserservice.dto.request.ProfileUpdateRequest;
+import com.hyf.malluserservice.dto.response.ProfileResponse;
 import com.hyf.malluserservice.service.UserService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-import java.util.List;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.Map;
 
 /**
- * 用户管理控制层，提供用户 CRUD 的 RESTful API 接口
+ * 用户域控制器。
+ *
+ * <p>提供用户资料读写与头像上传（上传至阿里云 OSS）。
+ *
+ * @author hyf
  */
+@Slf4j
 @RestController
-@RequestMapping("/users")
+@RequestMapping("/user")
+@RequiredArgsConstructor
 public class UserController {
 
     private final UserService userService;
+    private final OssService ossService;
 
-    /**
-     * 构造器注入 UserService
-     *
-     * @param userService 用户服务业务层接口
-     */
-    @Autowired
-    public UserController(UserService userService) {
-        this.userService = userService;
+    @GetMapping("/health")
+    public Result<Map<String, Object>> health() {
+        return Result.success(Map.of(
+                "service", "mall-user-service",
+                "status", "UP"
+        ));
     }
 
     /**
-     * 注册/创建新用户
+     * 公开头像上传接口（用于微信登录前上传 chooseAvatar 返回的临时文件）。
      *
-     * @param user 用户数据
-     * @return 注册成功后的用户数据（含回填的ID，且密码已被MD5哈希）
+     * <p>不需要登录态：上传后仅返回 OSS URL，由前端在 wxLogin 时回传给 auth-service。
+     *
+     * @param file multipart/form-data 中的 file 字段
+     * @return OSS 永久访问 URL
      */
-    @PostMapping
-    public Result<User> registerUser(@RequestBody User user) {
-        try {
-            User registeredUser = userService.registerUser(user);
-            return Result.success(registeredUser);
-        } catch (IllegalArgumentException e) {
-            return Result.error(400, e.getMessage());
-        } catch (Exception e) {
-            return Result.error("注册用户失败: " + e.getMessage());
+    @PostMapping("/avatar/upload")
+    public Result<Map<String, String>> uploadPublicAvatar(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) {
+            return Result.error(400, "请选择文件");
         }
+        if (file.getSize() > 5 * 1024 * 1024) {
+            return Result.error(400, "文件大小不能超过 5MB");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            return Result.error(400, "仅支持图片格式");
+        }
+
+        String avatarUrl = ossService.upload(file);
+        log.info("[user] 公开头像上传成功: url={}", avatarUrl);
+        return Result.success(Map.of("avatar", avatarUrl));
     }
 
     /**
-     * 根据用户ID删除用户
-     *
-     * @param id 用户ID
-     * @return 操作状态描述
+     * 获取当前登录用户的资料。
      */
-    @DeleteMapping("/{id}")
-    public Result<String> deleteUser(@PathVariable("id") Long id) {
-        try {
-            boolean success = userService.deleteUser(id);
-            if (success) {
-                return Result.success("删除用户成功");
-            } else {
-                return Result.error("删除用户失败，该用户可能不存在");
-            }
-        } catch (IllegalArgumentException e) {
-            return Result.error(400, e.getMessage());
-        } catch (Exception e) {
-            return Result.error("删除用户操作失败: " + e.getMessage());
-        }
+    @GetMapping("/profile")
+    public Result<ProfileResponse> getProfile() {
+        return Result.success(userService.getProfile());
     }
 
     /**
-     * 更新用户信息
+     * 修改当前登录用户的资料。
      *
-     * @param user 包含主键ID及待更新信息的实体对象
-     * @return 操作状态描述
+     * @param req 更新请求（所有字段可选）
      */
-    @PutMapping
-    public Result<String> updateUser(@RequestBody User user) {
-        try {
-            boolean success = userService.updateUser(user);
-            if (success) {
-                return Result.success("更新用户成功");
-            } else {
-                return Result.error("更新用户失败，该用户可能不存在");
-            }
-        } catch (IllegalArgumentException e) {
-            return Result.error(400, e.getMessage());
-        } catch (Exception e) {
-            return Result.error("更新用户操作失败: " + e.getMessage());
-        }
+    @PutMapping("/profile")
+    public Result<ProfileResponse> updateProfile(@RequestBody ProfileUpdateRequest req) {
+        return Result.success(userService.updateProfile(req));
     }
 
     /**
-     * 根据用户ID获取用户详细信息
+     * 上传头像，返回 OSS 永久 URL。
      *
-     * @param id 用户主键ID
-     * @return 用户详细信息
+     * <p>前端以 {@code multipart/form-data} 上传，字段名为 {@code file}。
+     * 返回格式：{@code { code: 200, message: "ok", data: { avatar: "url" } }}
      */
-    @GetMapping("/{id}")
-    public Result<User> getUserById(@PathVariable("id") Long id) {
-        try {
-            User user = userService.getUserById(id);
-            if (user != null) {
-
-
-                return Result.success(user);
-            } else {
-                return Result.error(404, "未找到该用户");
-            }
-        } catch (IllegalArgumentException e) {
-            return Result.error(400, e.getMessage());
-        } catch (Exception e) {
-            return Result.error("查询用户失败: " + e.getMessage());
+    @PostMapping("/profile/avatar")
+    public Result<Map<String, String>> uploadAvatar(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) {
+            return Result.error(400, "请选择文件");
         }
-    }
 
-    /**
-     * 根据用户名获取用户详情（支持精确查询，通常用于校验或登录）
-     *
-     * @param username 用户名
-     * @return 用户详细信息
-     */
-    @GetMapping("/username/{username}")
-    public Result<User> getUserByUsername(@PathVariable("username") String username) {
-        try {
-            User user = userService.getUserByUsername(username);
-            if (user != null) {
-                user.setPassword("******");
-                return Result.success(user);
-            } else {
-                return Result.error(404, "未找到对应的用户名");
-            }
-        } catch (IllegalArgumentException e) {
-            return Result.error(400, e.getMessage());
-        } catch (Exception e) {
-            return Result.error("查询用户异常: " + e.getMessage());
+        // 限制文件大小 5MB
+        if (file.getSize() > 5 * 1024 * 1024) {
+            return Result.error(400, "文件大小不能超过 5MB");
         }
-    }
 
-    /**
-     * 获取所有用户列表
-     *
-     * @return 用户数据集合
-     */
-    @GetMapping
-    public Result<List<User>> getAllUsers() {
-        try {
-            List<User> users = userService.getAllUsers();
-            for (User u : users) {
-                u.setPassword("******"); // 隐藏敏感密码数据
-            }
-            return Result.success(users);
-        } catch (Exception e) {
-            return Result.error("获取用户列表失败: " + e.getMessage());
+        // 限制文件类型
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            return Result.error(400, "仅支持图片格式");
         }
+
+        String avatarUrl = ossService.upload(file);
+        log.info("[user] 头像上传成功: userId={}, url={}",
+                com.hyf.mallcommon.security.context.SecurityContextHolder.getUserId(), avatarUrl);
+
+        // 更新用户头像
+        userService.updateAvatar(avatarUrl);
+
+        return Result.success(Map.of("avatar", avatarUrl));
     }
 }

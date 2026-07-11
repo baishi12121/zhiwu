@@ -8,19 +8,20 @@ spring:
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848
-  rabbitmq:
-    host: 127.0.0.1
-    port: 5672
-    username: guest
-    password: guest
   datasource:
     url: jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: admin
+    password: 123456
+    virtual-host: /mall
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml
-  type-aliases-package: com.hyf.mallorderservice.entity
+  type-aliases-package: com.hyf.mallorderservice.infrastructure.persistence.dataobject
   configuration:
     map-underscore-to-camel-case: true

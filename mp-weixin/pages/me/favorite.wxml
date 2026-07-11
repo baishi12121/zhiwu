@@ -1,8 +1,0 @@
-<view class="placeholder-page">
-  <view class="placeholder-card" style="border-color:#ff8a63">
-    <view class="placeholder-icon" style="background-color:#ff8a631F;color:#ff8a63">藏</view>
-    <text class="placeholder-title">商品收藏</text>
-    <text class="placeholder-desc">你收藏的好物都会在这里，降价时会主动通知你。</text>
-    <view class="placeholder-btn" style="background-color:#ff8a63" bindtap="goBack">返回上一页</view>
-  </view>
-</view>

@@ -8,3 +8,64 @@ spring:
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848
+    gateway:
+      routes:
+        # ============ 认证中心 ============
+        - id: mall-auth-service
+          uri: lb://mall-auth-service
+          predicates:
+            - Path=/auth/**
+        # ============ 用户域 ============
+        - id: mall-user-service
+          uri: lb://mall-user-service
+          predicates:
+            - Path=/user/**,/cart/**,/avatar/**
+        # ============ 商品域 ============
+        - id: mall-product-service
+          uri: lb://mall-product-service
+          predicates:
+            - Path=/home/**,/categories/**,/products/**,/upload/**,/dict/**,/health/**
+        # ============ 订单域 ============
+        - id: mall-order-service
+          uri: lb://mall-order-service
+          predicates:
+            - Path=/orders/**
+        # ============ 营销域 ============
+        - id: mall-marketing-service
+          uri: lb://mall-marketing-service
+          predicates:
+            - Path=/coupons/**
+        # ============ 搜索域 ============
+        - id: mall-search-service
+          uri: lb://mall-search-service
+          predicates:
+            - Path=/search/**
+        # ============ 管理后台 ============
+        - id: mall-admin-service
+          uri: lb://mall-admin-service
+          predicates:
+            - Path=/admin/**
+        # ============ AI 域（预留） ============
+        - id: mall-ai-service
+          uri: lb://mall-ai-service
+          predicates:
+            - Path=/ai/**
+        # ============ 内部 Feign 调用不暴露网关 ============
+        - id: internal-block
+          uri: no://op
+          predicates:
+            - Path=/internal/**
+          filters:
+            - SetStatus=404
+
+# 网关日志
+logging:
+  level:
+    org.springframework.cloud.gateway: info
+    com.hyf.mallgatewayservice: debug
+
+# JWT 配置（网关层独立验签，需与各服务保持一致）
+mall:
+  jwt:
+    secret: zhiwu-mall-secret-change-me-20050729hyf-666
+    issuer: zhiwu-mall

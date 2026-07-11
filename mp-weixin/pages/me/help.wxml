@@ -1,8 +1,0 @@
-<view class="placeholder-page">
-  <view class="placeholder-card" style="border-color:#ffb14a">
-    <view class="placeholder-icon" style="background-color:#ffb14a1F;color:#ffb14a">助</view>
-    <text class="placeholder-title">帮助中心</text>
-    <text class="placeholder-desc">常见问题、操作指引与反馈入口正在完善。</text>
-    <view class="placeholder-btn" style="background-color:#ffb14a" bindtap="goBack">返回上一页</view>
-  </view>
-</view>

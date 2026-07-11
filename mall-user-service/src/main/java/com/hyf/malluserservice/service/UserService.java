@@ -1,57 +1,169 @@
 package com.hyf.malluserservice.service;
 
+import com.hyf.mallcommon.core.exception.BizException;
+import com.hyf.mallcommon.core.result.ResultCode;
+import com.hyf.mallcommon.security.context.SecurityContextHolder;
+import com.hyf.malluserservice.dto.request.ProfileUpdateRequest;
+import com.hyf.malluserservice.dto.response.ProfileResponse;
 import com.hyf.malluserservice.entity.User;
-import java.util.List;
+import com.hyf.malluserservice.mapper.UserMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 /**
- * 用户服务接口，提供对外的用户业务层能力
+ * 用户资料服务。
+ *
+ * @author hyf
  */
-public interface UserService {
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class UserService {
+
+    private final UserMapper userMapper;
+
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     /**
-     * 注册/创建新用户
+     * 获取当前登录用户的资料。
      *
-     * @param user 用户实体，应包含 username, password, phone 等字段
-     * @return 注册成功并回填自增 ID 后的用户实体
+     * @return 用户资料
      */
-    User registerUser(User user);
+    public ProfileResponse getProfile() {
+        Long userId = getCurrentUserId();
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "用户不存在");
+        }
+        return toProfileResponse(user);
+    }
 
     /**
-     * 根据主键ID删除用户
+     * 更新当前登录用户的资料。
      *
-     * @param id 用户主键ID
-     * @return 删除成功返回 true，否则返回 false
+     * @param req 更新请求（仅更新非 null 字段）
+     * @return 更新后的用户资料
      */
-    boolean deleteUser(Long id);
+    @Transactional
+    public ProfileResponse updateProfile(ProfileUpdateRequest req) {
+        Long userId = getCurrentUserId();
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "用户不存在");
+        }
+
+        boolean changed = false;
+
+        if (req.getNickname() != null) {
+            user.setNickname(req.getNickname());
+            changed = true;
+        }
+        if (req.getGender() != null) {
+            user.setGender(parseGender(req.getGender()));
+            changed = true;
+        }
+        if (req.getBirthday() != null) {
+            user.setBirthday(LocalDate.parse(req.getBirthday(), DATE_FMT));
+            changed = true;
+        }
+        if (req.getProfession() != null) {
+            user.setProfession(req.getProfession());
+            changed = true;
+        }
+        if (req.getProvinceCode() != null) {
+            user.setProvinceCode(req.getProvinceCode());
+            changed = true;
+        }
+        if (req.getCityCode() != null) {
+            user.setCityCode(req.getCityCode());
+            changed = true;
+        }
+        if (req.getCountyCode() != null) {
+            user.setCountyCode(req.getCountyCode());
+            changed = true;
+        }
+
+        if (changed) {
+            userMapper.updateById(user);
+            log.info("[user] 更新资料成功: userId={}", userId);
+        }
+
+        return toProfileResponse(user);
+    }
 
     /**
-     * 更新用户属性（只更新传入实体中非空的属性）
+     * 更新用户头像 URL。
      *
-     * @param user 包含主键ID及需要更新属性的实体对象
-     * @return 更新成功返回 true，否则返回 false
+     * @param avatarUrl 头像 URL
+     * @return 更新后的用户资料
      */
-    boolean updateUser(User user);
+    @Transactional
+    public ProfileResponse updateAvatar(String avatarUrl) {
+        Long userId = getCurrentUserId();
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "用户不存在");
+        }
+        user.setAvatar(avatarUrl);
+        userMapper.updateById(user);
+        log.info("[user] 更新头像成功: userId={}, avatar={}", userId, avatarUrl);
+        return toProfileResponse(user);
+    }
 
     /**
-     * 根据用户ID获取详细信息
-     *
-     * @param id 用户主键ID
-     * @return 对应的用户实体，未找到返回 null
+     * 从 SecurityContextHolder 获取当前登录用户 ID。
      */
-    User getUserById(Long id);
+    private Long getCurrentUserId() {
+        Long userId = SecurityContextHolder.getUserId();
+        if (userId == null) {
+            throw new BizException(ResultCode.UNAUTHORIZED);
+        }
+        return userId;
+    }
 
     /**
-     * 根据用户名获取详细信息（可用于验证用户登录）
-     *
-     * @param username 用户名
-     * @return 对应的用户实体，未找到返回 null
+     * 将 User 实体转为 ProfileResponse。
      */
-    User getUserByUsername(String username);
+    private ProfileResponse toProfileResponse(User user) {
+        return ProfileResponse.builder()
+                .id(user.getId())
+                .account(user.getAccount())
+                .nickname(user.getNickname())
+                .avatar(user.getAvatar())
+                .gender(genderToString(user.getGender()))
+                .birthday(user.getBirthday() != null ? user.getBirthday().format(DATE_FMT) : null)
+                .fullLocation(null) // TODO: 待 region 表反查实现
+                .provinceCode(user.getProvinceCode())
+                .cityCode(user.getCityCode())
+                .countyCode(user.getCountyCode())
+                .profession(user.getProfession())
+                .build();
+    }
 
     /**
-     * 获取所有用户列表
-     *
-     * @return 用户实体集合
+     * 性别 int → 字符串映射。
      */
-    List<User> getAllUsers();
+    private static String genderToString(Integer gender) {
+        return switch (gender == null ? 0 : gender) {
+            case 1 -> "男";
+            case 2 -> "女";
+            default -> null;
+        };
+    }
+
+    /**
+     * 性别字符串 → int 映射。
+     */
+    private static int parseGender(String gender) {
+        return switch (gender) {
+            case "男" -> 1;
+            case "女" -> 2;
+            default -> 0;
+        };
+    }
 }

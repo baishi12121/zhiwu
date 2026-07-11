@@ -11,49 +11,41 @@
 
     <artifactId>mall-user-service</artifactId>
     <name>mall-user-service</name>
-    <description>mall-user-service</description>
+    <description>用户域：用户 / 地址 / 收藏 / 足迹 / 消息 / 积分 / 购物车</description>
 
     <dependencies>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <groupId>com.hyf</groupId>
+            <artifactId>mall-common-web</artifactId>
         </dependency>
-
         <dependency>
-            <groupId>org.mybatis.spring.boot</groupId>
-            <artifactId>mybatis-spring-boot-starter</artifactId>
-            <version>3.0.4</version>
+            <groupId>com.hyf</groupId>
+            <artifactId>mall-common-security</artifactId>
         </dependency>
-
         <dependency>
-            <groupId>com.mysql</groupId>
-            <artifactId>mysql-connector-j</artifactId>
-            <scope>runtime</scope>
+            <groupId>com.hyf</groupId>
+            <artifactId>mall-common-mybatis</artifactId>
         </dependency>
-
-        <!-- Nacos 服务注册与发现 -->
+        <dependency>
+            <groupId>com.hyf</groupId>
+            <artifactId>mall-common-feign</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hyf</groupId>
+            <artifactId>mall-common-oss</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
-
-        <!-- Spring Cloud 负载均衡支持 -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
-
-        <!-- Spring Cloud OpenFeign 声明式客户端 -->
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-openfeign</artifactId>
-        </dependency>
-
-        <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <scope>annotationProcessor</scope>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
@@ -66,4 +58,3 @@
         </plugins>
     </build>
 </project>
-

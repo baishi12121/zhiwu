@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.hyf</groupId>
+        <artifactId>zhiwu-mall</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>mall-common</artifactId>
+    <name>mall-common</name>
+    <description>zhiwu-mall 公共模块父 POM</description>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>mall-common-core</module>
+        <module>mall-common-web</module>
+        <module>mall-common-security</module>
+        <module>mall-common-mybatis</module>
+        <module>mall-common-redis</module>
+        <module>mall-common-oss</module>
+        <module>mall-common-rabbitmq</module>
+        <module>mall-common-feign</module>
+    </modules>
+
+    <dependencies>
+        <!-- 所有公共子模块都用到 Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

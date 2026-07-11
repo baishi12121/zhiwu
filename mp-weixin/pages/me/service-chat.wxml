@@ -1,8 +1,0 @@
-<view class="placeholder-page">
-  <view class="placeholder-card" style="border-color:#4f95ff">
-    <view class="placeholder-icon" style="background-color:#4f95ff1F;color:#4f95ff">客</view>
-    <text class="placeholder-title">在线客服</text>
-    <text class="placeholder-desc">7x24 小时为你解答问题，连接中请稍候。</text>
-    <view class="placeholder-btn" style="background-color:#4f95ff" bindtap="goBack">返回上一页</view>
-  </view>
-</view>

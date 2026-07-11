@@ -1,8 +1,0 @@
-<view class="placeholder-page">
-  <view class="placeholder-card" style="border-color:#ff4142">
-    <view class="placeholder-icon" style="background-color:#ff41421F;color:#ff4142">铃</view>
-    <text class="placeholder-title">消息中心</text>
-    <text class="placeholder-desc">订单通知、优惠活动与系统消息稍后整合展示。</text>
-    <view class="placeholder-btn" style="background-color:#ff4142" bindtap="goBack">返回上一页</view>
-  </view>
-</view>

@@ -11,12 +11,53 @@
 
     <artifactId>mall-gateway-service</artifactId>
     <name>mall-gateway-service</name>
-    <description>mall-gateway-service</description>
+    <description>zhiwu-mall 网关：统一入口 / 路由 / 鉴权</description>
 
     <dependencies>
+        <!-- 网关基于 WebFlux，不能引入 spring-boot-starter-web / mall-common-web -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway</artifactId>
+        </dependency>
+
+        <!-- Nacos 服务发现 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+
+        <!-- 负载均衡 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
+        <!-- 仅依赖 core：Result / 常量，避免拉入 servlet web -->
+        <dependency>
+            <groupId>com.hyf</groupId>
+            <artifactId>mall-common-core</artifactId>
+        </dependency>
+
+        <!-- JWT 解析（网关层独立验签，不依赖 mall-common-security） -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 
@@ -29,4 +70,3 @@
         </plugins>
     </build>
 </project>
-

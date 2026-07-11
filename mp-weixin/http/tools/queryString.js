@@ -1,1 +1,0 @@
-"use strict";function o(r){return!r||typeof r!="object"||Array.isArray(r)?"":Object.entries(r).filter(([t,n])=>n!=null).map(([t,n])=>{const i=encodeURIComponent(t);return Array.isArray(n)?n.filter(e=>e!=null).map(e=>`${i}=${encodeURIComponent(e)}`).join("&"):`${i}=${encodeURIComponent(n)}`}).join("&")}exports.stringifyQuery=o;

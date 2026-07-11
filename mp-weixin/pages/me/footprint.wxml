@@ -1,8 +1,0 @@
-<view class="placeholder-page">
-  <view class="placeholder-card" style="border-color:#9167ff">
-    <view class="placeholder-icon" style="background-color:#9167ff1F;color:#9167ff">足</view>
-    <text class="placeholder-title">浏览足迹</text>
-    <text class="placeholder-desc">记录你最近看过的商品，回顾浏览历史。</text>
-    <view class="placeholder-btn" style="background-color:#9167ff" bindtap="goBack">返回上一页</view>
-  </view>
-</view>
