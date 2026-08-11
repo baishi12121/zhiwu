@@ -10,7 +10,7 @@ Two frontend codebases exist:
 - **`uniapp-shop-vue3-ts/`** — uni-app + Vue 3 + TypeScript + Pinia 源码，编译到微信小程序（以及 H5/App 多端）
 - **`mp-weixin/`** — 原生微信小程序编译产物（`@dcloudio/uni-mp-weixin` 编译输出），包含 mock 接口层的旧版代码
 
-**Current state = skeleton/DDD refactor in progress.** Most business services expose only a `GET /api/<area>/health` endpoint; controllers, application/domain services, and repository impls are placeholders (return `null`/`0` or empty). **Exception: `mall-auth-service` is fully implemented** (see below). When implementing, fill these in — do not assume the target behavior already exists.
+**Current state = skeleton/DDD refactor in progress.** Most business services expose only a `GET /api/<area>/health` endpoint; controllers, application/domain services, and repository impls are placeholders (return `null`/`0` or empty). **Exceptions: `mall-auth-service` is fully implemented** (see below), and **`mall-ai-service` + `shopkeeper-agent` form a working AI customer-service system** (see AI Customer Service section). When implementing, fill these in — do not assume the target behavior already exists.
 
 ## Build & Run
 
@@ -24,6 +24,13 @@ mvn -f E:/zhiwu-mall/mall-product-service/pom.xml clean package -DskipTests
 # Run a single service (must cd into the module dir for spring-boot:run)
 cd E:/zhiwu-mall/mall-product-service && mvn spring-boot:run
 
+# AI agent (shopkeeper-agent) — Python/FastAPI
+cd E:/zhiwu-mall/shopkeeper-agent
+uv sync                              # install dependencies
+uv run python main.py                # start on :8090 (needs Qdrant/ES/Embedding running)
+# Or via Docker:
+cd docker && pwsh manage.ps1 up      # start all 5 services
+
 # Frontend (uniapp-shop-vue3-ts)
 cd E:/zhiwu-mall/uniapp-shop-vue3-ts && npm install && npm run dev:mp-weixin
 ```
@@ -34,12 +41,14 @@ No tests exist (`src/test/` is absent) and there is no lint/checkstyle setup. `a
 
 ```bash
 docker compose -f E:/zhiwu-mall/docker-compose.yml up -d   # Nacos + Sentinel dashboard
+# For AI customer service, also start shopkeeper-agent's infrastructure:
+# cd E:/zhiwu-mall/shopkeeper-agent/docker && pwsh manage.ps1 up
 ```
 
 Then ensure these are running locally:
 - **Nacos** `127.0.0.1:8848` — service discovery (also needs 9848/9849 gRPC ports; the compose file maps them)
 - **Sentinel Dashboard** `localhost:8858` — only referenced by `mall-marketing-service`
-- **MySQL** `localhost:3306`, user `root` / `123456` — **single database `mall`**. Initialize with `sql/init.sql`
+- **MySQL** `localhost:3306`, user `root` / `123456` — **single database `mall`**. Initialize with `sql/init.sql`. Also create `meta` database with `shopkeeper-agent/docker/mysql/meta.sql` for the AI agent
 - **Redis** `127.0.0.1:6379`, no password, database `1`
 - **RabbitMQ** `localhost:5672`, user `admin` / `123456`, vhost `/mall`
 
@@ -67,7 +76,7 @@ Business services (each `@EnableDiscoveryClient` + `@SpringBootApplication`):
 | `mall-product-service` | 8084 | category / product / SKU / stock — **skeleton** |
 | `mall-auth-service` | 8085 | **Fully implemented** — see Authentication section below |
 | `mall-search-service` | 8086 | ES search (ES not wired yet) |
-| `mall-ai-service` | 8087 | reserved for RAG |
+| `mall-ai-service` | 8087 | AI customer service — SSE proxy to shopkeeper-agent (Text-to-SQL via LangGraph) |
 | `mall-admin-service` | 8088 | admin backend — **skeleton** |
 
 ## Authentication (`mall-auth-service`)
@@ -116,6 +125,204 @@ Business services (each `@EnableDiscoveryClient` + `@SpringBootApplication`):
 - Access token TTL: 30 min; Refresh token TTL: 7 days
 - On 401 response (code 401 or 1003), clear Pinia member store and redirect to `/pages/login/login`
 
+## AI Customer Service System (`mall-ai-service` + `shopkeeper-agent`)
+
+The AI customer service is a two-tier system: a Java microservice (`mall-ai-service`) acts as a transparent SSE proxy, forwarding user questions to a Python LangGraph agent (`shopkeeper-agent`) that performs Text-to-SQL querying against the `mall` database.
+
+### Architecture flow
+
+```
+[Uniapp Frontend]
+    | POST /ai/chat  (SSE, text/event-stream)
+    v
+[mall-ai-service :8087]  (Spring Boot — stateless SSE proxy)
+    | POST http://localhost:8090/api/query  (SSE)
+    v
+[shopkeeper-agent :8090]  (FastAPI + LangGraph — Text-to-SQL agent)
+    | SQL queries
+    v
+[MySQL mall database]  (the same `mall` DB used by all business services)
+```
+
+Side infrastructure used only by shopkeeper-agent:
+- **Qdrant** `:6333` — vector database, 2 collections (`column_info_collection`, `metric_info_collection`), 1024-dim Cosine similarity
+- **Elasticsearch** `:9200` — full-text index (`value_index`) with IK Chinese analyzer for column value search
+- **TEI (Text Embeddings Inference)** `:8089` — serves `BAAI/bge-large-zh-v1.5` for 1024-dim embeddings
+- **Meta MySQL database** `meta` — structured metadata (tables, columns, metrics, column-metric relationships), separate from the `mall` business DB
+
+These are started via `docker compose` in the shopkeeper-agent directory, separate from the main project's `docker-compose.yml`.
+
+### `mall-ai-service` — Java SSE proxy (port 8087)
+
+A thin stateless proxy layer. No database, no authentication, no AI logic — purely forwards SSE streams.
+
+**Dependencies**: `mall-common-web` (for `Result<T>`, CORS, exception handling), `spring-boot-starter-webflux` (for `WebClient`), Nacos discovery, Spring Cloud LoadBalancer. Does NOT depend on MyBatis, Redis, RabbitMQ, OSS, or Security.
+
+**Package structure** (`com.hyf.mallaiservice`):
+
+| Class | Role |
+|---|---|
+| `MallAiServiceApplication` | `@SpringBootApplication` + `@EnableDiscoveryClient` |
+| `config/AiServiceConfig` | Creates `WebClient` bean (`aiAgentWebClient`) pointing at shopkeeper-agent's base URL, with configurable timeout |
+| `controller/AiController` | REST controller — 3 endpoints (see below) |
+| `service/AiAgentService` | Core proxy: `chat(query)` returns `Flux<String>` by POSTing to shopkeeper-agent's `/api/query`, error → graceful SSE error message |
+| `properties/AiAgentProperties` | `@ConfigurationProperties(prefix="mall.ai.agent")` — `baseUrl`, `queryPath`, `timeoutMs` |
+| `dto/ChatRequest` | Inbound: `query` (String, `@NotBlank`, `@Size(max=500)`) |
+| `dto/AgentQueryRequest` | Outbound: `query` (String), mirrors shopkeeper-agent's `QuerySchema` |
+
+**Endpoints** (all under `/ai/**`, whitelisted at the gateway — no auth required):
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/ai/health` | Health check + shopkeeper-agent reachability test (probes `/docs`) |
+| `POST` | `/ai/chat` | **Main streaming endpoint** — returns `text/event-stream`. Forwards query to shopkeeper-agent, passes SSE events through unmodified |
+| `GET` | `/ai/chat/test` | Non-streaming test endpoint — `.blockLast()` on the full response |
+
+**Configuration** (`application.yml`):
+- `server.port: 8087`
+- `spring.mvc.async.request-timeout: 300000` (5 min — critical for long SSE streams; without this Tomcat kills the connection)
+- `mall.ai.agent.base-url: http://localhost:8090`
+- `mall.ai.agent.query-path: /api/query`
+- `mall.ai.agent.timeout-ms: 60000`
+
+### `shopkeeper-agent` — Python Text-to-SQL agent (port 8090)
+
+A production-grade intelligent data query agent. **Tech stack**: Python 3.14, FastAPI + uvicorn, LangGraph 1.1+, LangChain (OpenAI-compatible LLM), SQLAlchemy 2.0 + asyncmy (async MySQL), Qdrant (vector search), Elasticsearch (full-text search), HuggingFace TEI (embeddings), Jieba (Chinese NLP), Loguru (logging).
+
+**Package manager**: `uv` (`pyproject.toml` + `uv.lock`). **Linting**: Ruff + pre-commit.
+
+#### Project structure
+
+```
+shopkeeper-agent/
+├── main.py                    # FastAPI app (port 8090), CORS, request_id middleware
+├── conf/
+│   ├── app_config.yaml        # MySQL/Qdrant/ES/Embedding/LLM/logging config
+│   └── meta_config.yaml       # Knowledge base: 9 tables, 30+ columns, 4 metrics to index
+├── app/
+│   ├── agent/                 # LangGraph workflow
+│   │   ├── graph.py           # 12-node StateGraph definition
+│   │   ├── state.py           # DataAgentState (TypedDict — shared state across nodes)
+│   │   ├── context.py         # DataAgentContext (TypedDict — runtime dependencies, not in state)
+│   │   ├── llm.py             # LLM singleton (OpenAI-compatible, temperature=0)
+│   │   └── nodes/             # 12 node implementations
+│   ├── api/                   # FastAPI router, schemas, dependencies, lifespan
+│   ├── clients/               # Connection managers: MySQL, Qdrant, ES, Embedding
+│   ├── conf/                  # Python config loaders (OmegaConf + dataclasses)
+│   ├── core/                  # Loguru logging + request_id ContextVar
+│   ├── entities/              # Dataclasses: ColumnInfo, TableInfo, MetricInfo, ValueInfo
+│   ├── models/                # SQLAlchemy ORM models (meta DB: table_info, column_info, etc.)
+│   ├── prompt/                # Prompt file loader
+│   ├── repositories/          # Data access: Meta MySQL, DW MySQL, Qdrant, Elasticsearch
+│   ├── scripts/               # build_meta_knowledge.py — CLI for knowledge base indexing
+│   └── services/              # QueryService (orchestrates one query) + MetaKnowledgeService
+├── prompts/                   # 7 .prompt template files (Chinese)
+├── docker/                    # docker-compose, Dockerfile, entrypoint.sh, meta.sql, ES IK plugin
+└── docs/                      # Architecture diagrams
+```
+
+#### LangGraph pipeline (12 nodes, ~8 LLM calls per query)
+
+```
+START
+  → extract_keywords          (Jieba TF-IDF + POS filtering — no LLM)
+  → recoll_column             (LLM expands keywords → embed → Qdrant vector search)
+  → recoll_value              (LLM expands keywords → ES full-text search with IK analyzer)
+  → recoll_metric             (LLM expands keywords → embed → Qdrant vector search)
+    [3 parallel branches]
+  → merge_retrieved_info      (7 sub-steps: deduplicate, fill metric columns, merge values,
+                               organize by table, fill PK/FK, build TableInfo/MetricInfo state)
+  → filter_table              (LLM selects needed tables+columns from candidates)
+  → filter_metric             (LLM selects needed metrics from candidates)
+    [2 parallel branches]
+  → add_extra_context         (today's date/day-of-week/quarter + DB dialect/version)
+  → generate_sql              (LLM generates SQL from YAML-structured context)
+  → validate_sql              (EXPLAIN against real DB — no LLM)
+  → conditional edge:
+      error=None? → run_sql   (execute and stream results)
+      error≠None? → correct_sql (LLM fixes SQL) → run_sql
+```
+
+Every node emits `{"type": "progress", "step": "...", "status": "running/success/error"}` via SSE so the frontend sees real-time pipeline progress.
+
+#### Knowledge base (`conf/meta_config.yaml`)
+
+Defines what the agent knows about the database:
+
+- **9 tables** across 3 domains:
+  - Product: `product`, `product_sku`, `spec`, `spec_value`, `sku_spec_value`, `category`, `brand`
+  - Marketing: `coupon`
+  - Order: `order`, `order_item`
+- **4 metrics**: 商品价格 (product price), 商品库存 (inventory), 商品销量 (sales count), 订单实付金额 (order paid amount)
+- Each column specifies: `name`, `role` (primary_key/foreign_key/measure/dimension), `description`, `alias` list, `sync` flag (whether to index values in ES)
+
+#### API endpoint
+
+| Method | Path | Request | Response |
+|---|---|---|---|
+| `POST` | `/api/query` | `{"query": "统计华北地区销售总额"}` | `text/event-stream` SSE with 3 message types: `progress`, `result`, `error` |
+
+SSE message format:
+```json
+{"type": "progress", "step": "抽取关键词", "status": "success"}
+{"type": "result", "data": [{"销售总额": 123456.78}]}
+{"type": "error", "message": "SQL syntax error..."}
+```
+
+#### Database connections (all to host machine's MySQL)
+
+| Database | Host | Purpose |
+|---|---|---|
+| `meta` | `host.docker.internal:3306` | Structured metadata: table_info, column_info, metric_info, column_metric |
+| `mall` | `host.docker.internal:3306` | The real zhiwu-mall data warehouse for query execution |
+
+Both share the same MySQL instance as the main project. The `meta` database must be initialized with `docker/mysql/meta.sql` before first use.
+
+#### Docker deployment
+
+5 services in `docker/docker-compose.yaml`:
+- `elasticsearch` (custom build with IK plugin, `:9200`)
+- `kibana` (`:5601`, for ES exploration)
+- `qdrant` (`:6333`, vector DB)
+- `embedding` (TEI, `:8089` — port offset to avoid conflict with mall-user-service `:8081`)
+- `shopkeeper-agent` (built from `docker/Dockerfile`, `:8090`)
+
+MySQL is NOT containerized — the agent connects to the host machine's MySQL via `host.docker.internal`.
+
+**Entrypoint modes** (PowerShell: `docker/manage.ps1`):
+- `serve` — start FastAPI server (waits for Qdrant/ES/Embedding to be ready first)
+- `build` — run `build_meta_knowledge.py` to index the knowledge base, then exit
+
+#### Knowledge base initialization workflow
+
+Before the agent can answer questions, the knowledge base must be built:
+1. `MetaKnowledgeService` reads `meta_config.yaml`
+2. Queries the `mall` database for real column types (`SHOW COLUMNS`) and example values (`SELECT DISTINCT`)
+3. Persists metadata to Meta MySQL (`table_info`, `column_info`, `metric_info`, `column_metric`)
+4. Embeds column names/descriptions/aliases → upserts to Qdrant `column_info_collection`
+5. Embeds metric names/descriptions/aliases → upserts to Qdrant `metric_info_collection`
+6. Indexes column values for `sync: true` columns → bulk indexes to Elasticsearch `value_index`
+
+#### Prompt templates (7 `.prompt` files)
+
+| File | Used by | Output format |
+|---|---|---|
+| `extend_keywords_for_column_recall.prompt` | recall_column | JSON array |
+| `extend_keywords_for_metric_recall.prompt` | recall_metric | JSON array |
+| `extend_keywords_for_value_recall.prompt` | recall_value | JSON array |
+| `filter_table_info.prompt` | filter_table | JSON object |
+| `filter_metric_info.prompt` | filter_metric | JSON array |
+| `generate_sql.prompt` | generate_sql | Plain SQL (10 rules: SELECT only, backticks, LIMIT 20, no markdown, etc.) |
+| `correct_sql.prompt` | correct_sql | Plain SQL (minimum changes, preserve semantics) |
+
+#### LLM configuration
+
+- **Model**: `qwen3.6-flash` (via DashScope, OpenAI-compatible API)
+- **Base URL**: `https://dashscope.aliyuncs.com/compatible-mode/v1`
+- **Temperature**: 0 (deterministic SQL generation)
+- **API key**: Set via `LLM_API_KEY` in `.env`
+- Can be swapped to any OpenAI-compatible provider by changing `LLM_BASE_URL` and `LLM_MODEL_NAME`
+
 ## Frontend (`uniapp-shop-vue3-ts`)
 
 ### Tech stack
@@ -127,7 +334,7 @@ src/
 ├── pages/          业务页面（login, index, category, cart, my, goods, hot）
 ├── pagesMember/    会员分包（settings, profile, address）
 ├── pagesOrder/     订单分包（create, detail, payment, list）
-├── services/       API 层（login, home, goods, cart, order, pay, profile, address）
+├── services/       API 层（login, home, goods, cart, order, pay, profile, address, ai）
 ├── stores/         Pinia stores（modules/member — 用户 token/profile 持久化）
 ├── types/          TS 类型定义（member.d.ts, goods.d.ts, order.d.ts 等）
 ├── utils/          http.ts（请求拦截器 + baseURL）
@@ -140,6 +347,7 @@ src/
 - **Token persistence**: Pinia `member` store → `persist: { storage: { getItem/setItem: uni.getStorageSync/setStorageSync } }`
 - **HTTP interceptor**: 自动拼接 baseURL、注入 `Authorization: Bearer <token>`、注入 `source-client: miniapp` header、401 自动清理登录态并跳转。错误消息由 http.ts 统一 toast，页面 catch 块只做 console.error 日志记录，不重复 toast。
 - **LoginResult type** (`src/types/member.d.ts`): `{userId, nickname, avatar, memberLevel, accessToken, refreshToken, expiresIn, needBindPhone?, openid?, mobile?}`
+- **AI chat**: `src/services/ai.ts` consumes the `/ai/chat` SSE endpoint. Entry point: "我的" page → 智能客服 button navigates to the chat page (`src/pages/my/my.vue` line ~79)
 
 ### Login page behavior (`src/pages/login/login.vue`)
 
@@ -214,7 +422,7 @@ The intended Feign call is order→product `POST /internal/products/decrease-sto
 - **No Seata** — the `@GlobalTransactional` distributed-transaction flow described in the hot-rank and API docs has been dropped. Stock decrease for orders is intended to be a local MyBatis `UPDATE ... WHERE remain_stock >= ?` (not yet coded).
 - **No MQ code in src** — the click/order hot-ranking, coupon-seckill async consumers, and `ProductScoreMessageListener` exist only in `doc/商品热度排行榜设计文档.md`. `mall-common-rabbitmq` only provides the JSON converter bean.
 - `doc/小程序接口文档.md` is a third-party (Apifox "小兔鲜儿") contract the project has **not** adopted — it documents a different response shape (`msg`/`result`). The project's own contract is `doc/API接口文档.md` (`code`/`message`/`data`).
-- **Frontend-backend gap**: the uni-app frontend was built for a different API. Only `/auth/*` and `/user/profile` endpoints work end-to-end. Frontend calls to `/home/**`, `/cart/**`, `/orders/**`, `/pay/**`, `/member/**`, `/categories/top` have **no backend endpoint** yet and will fail. Gateway routes for `/cart/**` and `/avatar/**` go to `mall-user-service`, but the corresponding controllers don't exist.
+- **Frontend-backend gap**: the uni-app frontend was built for a different API. Only `/auth/*`, `/user/profile`, and `/ai/chat` endpoints work end-to-end. Frontend calls to `/home/**`, `/cart/**`, `/orders/**`, `/pay/**`, `/member/**`, `/categories/top` have **no backend endpoint** yet and will fail. Gateway routes for `/cart/**` and `/avatar/**` go to `mall-user-service`, but the corresponding controllers don't exist.
 
 ## Conventions to follow when adding code
 

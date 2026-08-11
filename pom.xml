@@ -167,6 +167,7 @@
         <module>mall-product-service</module>
         <module>mall-order-service</module>
         <module>mall-marketing-service</module>
+        <module>mall-seckill-service</module>
         <module>mall-search-service</module>
         <module>mall-ai-service</module>
         <module>mall-admin-service</module>

@@ -35,6 +35,10 @@
             <artifactId>mall-common-feign</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.hyf</groupId>
+            <artifactId>mall-common-oss</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>

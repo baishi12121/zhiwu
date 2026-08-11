@@ -37,4 +37,10 @@ public class AliOssProperties {
 
     /** 预签名下载 URL 有效期（秒），默认 3600（1 小时） */
     private long downloadExpireSeconds = 3600L;
+
+    /** Local upload directory used when OSS credentials are incomplete. */
+    private String localDir = "uploads";
+
+    /** Public URL prefix for locally stored uploads. */
+    private String localUrlPrefix = "/uploads";
 }

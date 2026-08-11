@@ -1,0 +1,14 @@
+server:
+  port: 8089
+
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  application:
+    name: mall-seckill-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        register-enabled: ${NACOS_REGISTER_ENABLED:true}
+        fail-fast: ${NACOS_FAIL_FAST:false}

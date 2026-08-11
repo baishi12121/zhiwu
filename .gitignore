@@ -25,3 +25,9 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 .DS_Store
+
+### Sensitive config (local dev profile, real credentials) ###
+application-dev.yml
+
+### Uploaded local files (local OSS fallback, now superseded by real OSS) ###
+uploads/

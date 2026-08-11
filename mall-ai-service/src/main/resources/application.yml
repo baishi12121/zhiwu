@@ -8,3 +8,23 @@ spring:
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848
+  # Spring MVC 异步请求超时（关键！）
+  # Flux<String> + produces=text/event-stream 在 Servlet 栈下走 MVC 异步适配，
+  # Tomcat 默认 asyncTimeout=30s，而 Python Agent 工作流通常需要 60s+，
+  # 必须显式调大，否则前端连接会被服务端提前关闭，导致收不到任何 SSE 数据。
+  mvc:
+    async:
+      request-timeout: 300000
+
+# 智能客服配置
+mall:
+  ai:
+    # shopkeeper-agent Python 服务地址（SSE 流式问答接口）
+    agent:
+      base-url: http://localhost:8090
+      # SSE 查询接口路径
+      query-path: /api/query
+      # 单次问答超时时间（毫秒）
+      # 必须与 spring.mvc.async.request-timeout 对齐（300s）
+      # 若 WebClient 先于 MVC 超时，整个 SSE 流会被 onError 中断
+      timeout-ms: 300000

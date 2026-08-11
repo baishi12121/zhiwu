@@ -2,6 +2,8 @@ server:
   port: 8088
 
 spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   application:
     name: mall-admin-service
   cloud:
@@ -9,13 +11,31 @@ spring:
       discovery:
         server-addr: 127.0.0.1:8848
   datasource:
-    url: jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai
-    username: root
-    password: 123456
+    url: ${MALL_DB_URL:jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai}
+    username: ${MALL_DB_USERNAME:mall_app}
+    password: ${MALL_DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      database: 6
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: com.hyf.malladminservice.entity
   configuration:
     map-underscore-to-camel-case: true
+
+# JWT / SaToken 配置（与 auth-service 共享同一 secret，本地验签）
+mall:
+  jwt:
+    secret: ${MALL_JWT_SECRET:}
+    access-token-ttl: 1800s    # 30 分钟（必须加 s 后缀，纯数字会被 Spring Boot 解析为毫秒！）
+    refresh-token-ttl: 604800s # 7 天
+  security:
+    enabled: true
+    exclude-paths:
+      - /admin/login
+      - /admin/health
+      - /error

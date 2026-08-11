@@ -11,7 +11,7 @@
 
     <artifactId>mall-marketing-service</artifactId>
     <name>mall-marketing-service</name>
-    <description>营销域：优惠券 / 秒杀 / 拼团 / 积分 / 签到 / 活动</description>
+    <description>营销域：优惠券 / 拼团 / 积分 / 签到 / 活动</description>
 
     <dependencies>
         <dependency>
@@ -28,16 +28,7 @@
         </dependency>
         <dependency>
             <groupId>com.hyf</groupId>
-            <artifactId>mall-common-rabbitmq</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.hyf</groupId>
             <artifactId>mall-common-feign</artifactId>
-        </dependency>
-        <!-- Sentinel 限流（秒杀入口） -->
-        <dependency>
-            <groupId>com.alibaba.cloud</groupId>
-            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
         </dependency>
         <dependency>
             <groupId>com.alibaba.cloud</groupId>

@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   application:
     name: mall-gateway-service
   cloud:
@@ -29,12 +31,16 @@ spring:
         - id: mall-order-service
           uri: lb://mall-order-service
           predicates:
-            - Path=/orders/**
+            - Path=/orders/**,/pay/**
         # ============ 营销域 ============
         - id: mall-marketing-service
           uri: lb://mall-marketing-service
           predicates:
             - Path=/coupons/**
+        - id: mall-seckill-service
+          uri: lb://mall-seckill-service
+          predicates:
+            - Path=/seckill/**
         # ============ 搜索域 ============
         - id: mall-search-service
           uri: lb://mall-search-service
@@ -67,5 +73,5 @@ logging:
 # JWT 配置（网关层独立验签，需与各服务保持一致）
 mall:
   jwt:
-    secret: zhiwu-mall-secret-change-me-20050729hyf-666
+    secret: ${MALL_JWT_SECRET:}
     issuer: zhiwu-mall

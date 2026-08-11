@@ -54,6 +54,7 @@ CREATE TABLE `user` (
   `county_code`   VARCHAR(12)     DEFAULT NULL                   COMMENT '区/县编码',
   `balance`        DECIMAL(10,2)   NOT NULL DEFAULT 0.00          COMMENT '模拟余额',
   `member_level`   VARCHAR(20)     NOT NULL DEFAULT 'NORMAL'      COMMENT 'NORMAL/SILVER/GOLD/DIAMOND',
+  `is_admin`       TINYINT         NOT NULL DEFAULT 0             COMMENT '0普通用户 1管理员',
   `growth`         INT             NOT NULL DEFAULT 0             COMMENT '成长值',
   `status`         TINYINT         NOT NULL DEFAULT 1             COMMENT '0禁用 1正常',
   `last_login_at`  DATETIME        DEFAULT NULL,
@@ -444,6 +445,8 @@ CREATE TABLE `order_item` (
   `subtotal`        DECIMAL(10,2)   NOT NULL,
   `real_pay`        DECIMAL(10,2)   NOT NULL                   COMMENT '实付小计',
   `properties`      JSON            DEFAULT NULL               COMMENT '规格快照 [{name,valueName}]',
+  `create_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_order` (`order_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单明细';
@@ -458,6 +461,7 @@ CREATE TABLE `order_status_log` (
   `operator`      VARCHAR(20)     DEFAULT 'USER'               COMMENT 'USER / SYSTEM / ADMIN',
   `remark`        VARCHAR(255)    DEFAULT NULL,
   `create_time`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_order` (`order_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单状态流转';
@@ -515,6 +519,36 @@ CREATE TABLE `dict` (
   UNIQUE KEY `uk_type_key` (`dict_type`, `dict_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通用字典';
 
+-- =====================================================================
+-- 五点五、支付域
+-- =====================================================================
+
+-- 支付记录表 — 跟踪微信支付交易号、预支付ID、退款信息
+DROP TABLE IF EXISTS `pay_record`;
+CREATE TABLE `pay_record` (
+  `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `order_id`        BIGINT UNSIGNED NOT NULL COMMENT '订单ID',
+  `order_no`        VARCHAR(32)     NOT NULL COMMENT '业务订单号',
+  `user_id`         BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+  `transaction_id`  VARCHAR(64)     DEFAULT NULL COMMENT '微信支付订单号',
+  `prepay_id`       VARCHAR(64)     DEFAULT NULL COMMENT '预支付交易会话ID',
+  `pay_amount`      DECIMAL(10,2)   NOT NULL COMMENT '支付金额(元)',
+  `pay_status`      TINYINT         NOT NULL DEFAULT 0 COMMENT '0待支付 1已支付 2已关闭 3支付失败',
+  `refund_no`       VARCHAR(64)     DEFAULT NULL COMMENT '退款单号',
+  `refund_id`       VARCHAR(64)     DEFAULT NULL COMMENT '微信退款单号',
+  `refund_amount`   DECIMAL(10,2)   DEFAULT NULL COMMENT '退款金额(元)',
+  `refund_status`   TINYINT         DEFAULT NULL COMMENT '0退款中 1已退款 2退款异常',
+  `refund_reason`   VARCHAR(255)    DEFAULT NULL COMMENT '退款原因',
+  `refunded_at`     DATETIME        DEFAULT NULL COMMENT '退款完成时间',
+  `paid_at`         DATETIME        DEFAULT NULL COMMENT '支付完成时间',
+  `create_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_order_id` (`order_id`),
+  KEY `idx_order_no` (`order_no`),
+  KEY `idx_transaction_id` (`transaction_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付记录';
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =====================================================================
@@ -533,11 +567,11 @@ INSERT INTO `region` (`code`, `name`, `parent_code`, `level`, `sort_order`) VALU
   ('370102', '历下区', '3701', 3, 1);
 
 -- 用户（密码 123456 = e10adc3949ba59abbe56e057f20f883e）
-INSERT INTO `user` (`id`, `account`, `nickname`, `password`, `mobile`, `gender`, `birthday`, `profession`, `province_code`, `city_code`, `county_code`, `balance`, `member_level`, `growth`) VALUES
-  (1, 'admin',    '超级管理员', 'e10adc3949ba59abbe56e057f20f883e', '13800000001', 1, '1990-01-01', '产品经理', '44', '4403', '440305', 9999.00, 'DIAMOND', 9999),
-  (2, 'zhangsan', '张三',       'e10adc3949ba59abbe56e057f20f883e', '13800000002', 1, '1995-05-10', '工程师',   '44', '4403', '440305',  500.00, 'GOLD',    2000),
-  (3, 'lisi',     '李四',       'e10adc3949ba59abbe56e057f20f883e', '13800000003', 2, '1998-08-20', '设计师',   '44', '4401', '440106',  200.00, 'SILVER',   800),
-  (4, 'xianjian', '小鲜',       'e10adc3949ba59abbe56e057f20f883e', '13123456789', 0, NULL,        NULL,       NULL, NULL,   NULL,     100.00, 'NORMAL',    0);
+INSERT INTO `user` (`id`, `account`, `nickname`, `password`, `mobile`, `gender`, `birthday`, `profession`, `province_code`, `city_code`, `county_code`, `balance`, `member_level`, `is_admin`, `growth`) VALUES
+  (1, 'admin',    '超级管理员', 'e10adc3949ba59abbe56e057f20f883e', '13800000001', 1, '1990-01-01', '产品经理', '44', '4403', '440305', 9999.00, 'DIAMOND', 1, 9999),
+  (2, 'zhangsan', '张三',       'e10adc3949ba59abbe56e057f20f883e', '13800000002', 1, '1995-05-10', '工程师',   '44', '4403', '440305',  500.00, 'GOLD',    0, 2000),
+  (3, 'lisi',     '李四',       'e10adc3949ba59abbe56e057f20f883e', '13800000003', 2, '1998-08-20', '设计师',   '44', '4401', '440106',  200.00, 'SILVER',  0,  800),
+  (4, 'xianjian', '小鲜',       'e10adc3949ba59abbe56e057f20f883e', '13123456789', 0, NULL,        NULL,       NULL, NULL,   NULL,     100.00, 'NORMAL',  0,    0);
 
 -- 登录凭证
 INSERT INTO `user_auth` (`user_id`, `identity_type`, `identifier`, `credential`) VALUES
@@ -681,7 +715,7 @@ INSERT INTO `user_cart` (`user_id`, `sku_id`, `count`, `selected`, `price`) VALU
 -- 轮播（5 个：首页 3 + 分类页 2）
 INSERT INTO `banner` (`id`, `title`, `img_url`, `href_url`, `type`, `distribution_site`, `sort_order`) VALUES
   (1, '春装新品上市', 'https://pcapi-xiaotuxian-front-devtest.itheima.net/static/banner/1.jpg', '/pages/category/category?id=1', 1, 1, 1),
-  (2, '限时秒杀',     'https://pcapi-xiaotuxian-front-devtest.itheima.net/static/banner/2.jpg', '/pages/goods/goods?id=4',       1, 1, 2),
+  (2, '限时特惠',     'https://pcapi-xiaotuxian-front-devtest.itheima.net/static/banner/2.jpg', '/pages/goods/goods?id=4',       1, 1, 2),
   (3, '会员专享',     'https://pcapi-xiaotuxian-front-devtest.itheima.net/static/banner/3.jpg', '/pagesMember/settings/settings', 1, 1, 3),
   (4, '数码专场',     'https://pcapi-xiaotuxian-front-devtest.itheima.net/static/banner/4.jpg', '/pages/category/category?id=4', 1, 2, 1),
   (5, '家居焕新',     'https://pcapi-xiaotuxian-front-devtest.itheima.net/static/banner/5.jpg', '/pages/category/category?id=3', 1, 2, 2);
@@ -769,3 +803,50 @@ INSERT INTO `dict` (`dict_type`, `dict_key`, `dict_label`, `sort_order`) VALUES
   ('delivery_time_type', '1', '不限',     1),
   ('delivery_time_type', '2', '工作日',   2),
   ('delivery_time_type', '3', '双休或假日', 3);
+
+-- =====================================================================
+-- 六、秒杀活动域
+-- =====================================================================
+
+-- 秒杀活动主表
+DROP TABLE IF EXISTS `seckill_activity`;
+CREATE TABLE `seckill_activity` (
+  `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name`          VARCHAR(100)    NOT NULL                       COMMENT '活动名称',
+  `start_time`    DATETIME        NOT NULL                       COMMENT '开始时间',
+  `end_time`      DATETIME        NOT NULL                       COMMENT '结束时间',
+  `enabled`       TINYINT         NOT NULL DEFAULT 1             COMMENT '0禁用 1启用',
+  `remark`        VARCHAR(255)    DEFAULT NULL                   COMMENT '备注',
+  `create_time`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_enabled_time` (`enabled`, `start_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='秒杀活动';
+
+-- 秒杀活动商品项（SKU 维度，决定前台展示与下单）
+DROP TABLE IF EXISTS `seckill_item`;
+CREATE TABLE `seckill_item` (
+  `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `activity_id`     BIGINT UNSIGNED NOT NULL,
+  `spu_id`          BIGINT UNSIGNED NOT NULL,
+  `sku_id`          BIGINT UNSIGNED NOT NULL,
+  `seckill_price`   DECIMAL(10,2)   NOT NULL                    COMMENT '秒杀价',
+  `seckill_stock`   INT             NOT NULL DEFAULT 0           COMMENT '秒杀库存（独立于 SKU 原库存）',
+  `limit_per_user`  INT             NOT NULL DEFAULT 1           COMMENT '每人限购',
+  `sort_order`      INT             NOT NULL DEFAULT 0,
+  `status`          TINYINT         NOT NULL DEFAULT 1           COMMENT '0下架 1上架',
+  `create_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_activity_sku` (`activity_id`, `sku_id`),
+  KEY `idx_activity_sort` (`activity_id`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='秒杀活动商品项';
+
+-- 秒杀活动示例数据（覆盖现有 SKU 1/7/10）
+INSERT INTO `seckill_activity` (`id`, `name`, `start_time`, `end_time`, `enabled`, `remark`) VALUES
+  (1, '8月限时秒杀', '2026-08-01 00:00:00', '2026-08-31 23:59:59', 1, '8 月整月秒杀专场');
+
+INSERT INTO `seckill_item` (`activity_id`, `spu_id`, `sku_id`, `seckill_price`, `seckill_stock`, `limit_per_user`, `sort_order`, `status`) VALUES
+  (1, 1, 1, 99.00,  50, 1, 1, 1),
+  (1, 2, 7, 39.00, 100, 2, 2, 1),
+  (1, 4, 10, 149.00, 30, 1, 3, 1);

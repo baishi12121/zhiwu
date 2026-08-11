@@ -53,6 +53,14 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             "/health/**",
             "/avatar/**",
             "/user/avatar/upload",
+            "/pay/wx/notify",
+            // 管理后台登录入口（其他 /admin/** 仍需 token）
+            "/admin/login",
+            "/admin/health",
+            // 智能客服聊天接口（允许匿名咨询）
+            "/ai/chat",
+            "/ai/chat/**",
+            "/ai/health",
             "/error"
     );
 

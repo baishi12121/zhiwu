@@ -2,6 +2,8 @@ server:
   port: 8085
 
 spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   application:
     name: mall-auth-service
   cloud:
@@ -11,16 +13,16 @@ spring:
         register-enabled: true
 
   datasource:
-    url: jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai
-    username: root
-    password: 123456
+    url: ${MALL_DB_URL:jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai}
+    username: ${MALL_DB_USERNAME:mall_app}
+    password: ${MALL_DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   data:
     redis:
       host: 127.0.0.1
       port: 6379
-      database: 1
+      database: 6
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml
@@ -31,7 +33,7 @@ mybatis:
 # JWT / SaToken 配置
 mall:
   jwt:
-    secret: zhiwu-mall-secret-change-me-20050729hyf-666
+    secret: ${MALL_JWT_SECRET:}
     access-token-ttl: 1800s    # 30 分钟（必须加 s 后缀，纯数字会被 Spring Boot 解析为毫秒！）
     refresh-token-ttl: 604800s # 7 天
   security:
@@ -40,5 +42,5 @@ mall:
       - /auth/**
       - /error
   wechat:
-    appid: wxfbea11012b0ef3ff
-    secret: 3b41582a9e5d7a182dc21612e73e3c24
+    appid: ${WECHAT_APPID:}
+    secret: ${WECHAT_SECRET:}

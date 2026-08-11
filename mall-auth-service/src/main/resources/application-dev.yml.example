@@ -1,0 +1,14 @@
+# 本地开发环境配置模板
+# 使用方法：复制为 application-dev.yml 并填入真实值（application-dev.yml 已加入 .gitignore）
+# cp application-dev.yml.example application-dev.yml
+spring:
+  datasource:
+    username: root
+    password: replace-me
+
+mall:
+  jwt:
+    secret: replace-me-with-32-bytes-minimum
+  wechat:
+    appid: replace-me
+    secret: replace-me

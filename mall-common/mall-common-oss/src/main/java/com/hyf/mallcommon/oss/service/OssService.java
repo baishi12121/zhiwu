@@ -9,11 +9,19 @@ import com.hyf.mallcommon.core.result.ResultCode;
 import com.hyf.mallcommon.oss.properties.AliOssProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
@@ -92,6 +100,11 @@ public class OssService {
     }
 
     private void doUpload(String objectKey, InputStream in, String contentType, long contentLength) {
+        if (oss == null) {
+            doLocalUpload(objectKey, in);
+            log.info("[oss-local] 上传成功 objectKey={} size={}", objectKey, contentLength);
+            return;
+        }
         ObjectMetadata meta = new ObjectMetadata();
         if (contentType != null) {
             meta.setContentType(contentType);
@@ -99,6 +112,21 @@ public class OssService {
         meta.setContentLength(contentLength);
         oss.putObject(properties.getBucketName(), objectKey, in, meta);
         log.info("[oss] 上传成功 objectKey={} size={}", objectKey, contentLength);
+    }
+
+    /**
+     * 未配置 OSS 凭证时的本地回退：把文件写入 {@link AliOssProperties#getLocalDir()}，
+     * 由 {@code ossLocalResourceConfigurer} 的静态资源映射（{@code localUrlPrefix/**}）对外提供访问。
+     */
+    private void doLocalUpload(String objectKey, InputStream in) {
+        Path target = Paths.get(properties.getLocalDir()).resolve(objectKey).normalize();
+        try {
+            Files.createDirectories(target.getParent());
+            Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            log.error("[oss-local] 本地文件写入失败 objectKey={} target={}", objectKey, target, e);
+            throw new BizException(ResultCode.INTERNAL_ERROR, "文件上传失败", e);
+        }
     }
 
     // ===================== 下载（预签名） =====================
@@ -113,6 +141,10 @@ public class OssService {
     public String generateDownloadUrl(String objectKey) {
         if (objectKey == null || objectKey.isBlank()) {
             throw new BizException(ResultCode.BAD_REQUEST, "objectKey 不能为空");
+        }
+        if (oss == null) {
+            // 本地模式：文件已通过静态资源映射对外可访问，直接返回访问 URL，无需预签名
+            return buildUrl(objectKey);
         }
         try {
             Date expiration = new Date(System.currentTimeMillis()
@@ -139,6 +171,10 @@ public class OssService {
         if (url == null || url.isBlank()) {
             return "";
         }
+        String localPrefix = properties.getLocalUrlPrefix();
+        if (localPrefix != null && url.startsWith(localPrefix + "/")) {
+            return url.substring(localPrefix.length() + 1);
+        }
         String prefix = "https://" + properties.getBucketName() + "." + properties.getEndpoint() + "/";
         // 也兼容 http:// 和没有协议头的情况
         if (url.startsWith(prefix)) {
@@ -160,8 +196,11 @@ public class OssService {
         return url;
     }
 
-    /** 构建外部可访问的 HTTPS URL */
+    /** 构建外部可访问的 URL；本地模式返回静态资源前缀路径 */
     String buildUrl(String objectKey) {
+        if (oss == null) {
+            return properties.getLocalUrlPrefix() + "/" + objectKey;
+        }
         return "https://" + properties.getBucketName() + "." + properties.getEndpoint() + "/" + objectKey;
     }
 

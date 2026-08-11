@@ -2,6 +2,8 @@ server:
   port: 8082
 
 spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   application:
     name: mall-order-service
   cloud:
@@ -9,19 +11,39 @@ spring:
       discovery:
         server-addr: 127.0.0.1:8848
   datasource:
-    url: jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai
-    username: root
-    password: 123456
+    url: ${MALL_DB_URL:jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai}
+    username: ${MALL_DB_USERNAME:mall_app}
+    password: ${MALL_DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   rabbitmq:
     host: localhost
     port: 5672
-    username: admin
-    password: 123456
+    username: ${RABBITMQ_USERNAME:mall_app}
+    password: ${RABBITMQ_PASSWORD:}
     virtual-host: /mall
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 1
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml
-  type-aliases-package: com.hyf.mallorderservice.infrastructure.persistence.dataobject
+  type-aliases-package: com.hyf.mallorderservice.dataobject
   configuration:
     map-underscore-to-camel-case: true
+
+# 支付配置
+mall:
+  pay:
+    # 模式：mock（开发，秒成功）| wechat（生产，调用微信支付 V3 API）
+    mode: mock
+  # 微信支付配置（仅 mode=wechat 时需要）
+  wechat:
+    pay:
+      appid: ${WECHAT_PAY_APPID:}
+      mchid: ${WECHAT_PAY_MCHID:}
+      mch-serial-no: ${WECHAT_PAY_MCH_SERIAL_NO:}
+      private-key-file-path: ${WECHAT_PAY_PRIVATE_KEY_PATH:}
+      api-v3-key: ${WECHAT_PAY_API_V3_KEY:}
+      notify-url: ${WECHAT_PAY_NOTIFY_URL:http://localhost:8080/pay/wx/notify}
+      refund-notify-url: ${WECHAT_PAY_REFUND_NOTIFY_URL:http://localhost:8080/pay/refund/notify}

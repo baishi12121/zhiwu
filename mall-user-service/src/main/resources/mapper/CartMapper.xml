@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hyf.malluserservice.mapper.UserCartMapper">
+
+    <!--
+        购物车列表联表查询：user_cart + product_sku + product + sku_spec_value + spec_value
+        - GROUP_CONCAT 按 sort_order 拼接规格值名称为 attrsText（如 "瓷白色 S"）
+        - LEFT JOIN 保证 SKU/商品被删时购物车行仍返回（isEffective=0）
+    -->
+    <select id="selectCartList" resultType="com.hyf.malluserservice.dto.response.CartItemResponse">
+        SELECT
+            ANY_VALUE(p.id)              AS id,
+            c.sku_id                     AS skuId,
+            ANY_VALUE(p.name)            AS name,
+            ANY_VALUE(s.picture)         AS picture,
+            c.count                      AS count,
+            c.price                      AS price,
+            ANY_VALUE(s.price)           AS nowPrice,
+            ANY_VALUE(s.inventory)       AS stock,
+            c.selected                   AS selected,
+            GROUP_CONCAT(sv.name ORDER BY ssv.sort_order SEPARATOR ' ') AS attrsText,
+            ANY_VALUE(CASE WHEN s.status = 1 AND p.status = 1 THEN 1 ELSE 0 END) AS isEffective
+        FROM user_cart c
+        LEFT JOIN product_sku s   ON c.sku_id = s.id
+        LEFT JOIN product p       ON s.product_id = p.id
+        LEFT JOIN sku_spec_value ssv ON c.sku_id = ssv.sku_id
+        LEFT JOIN spec_value sv   ON ssv.spec_value_id = sv.id
+        WHERE c.user_id = #{userId}
+        <if test="onlySelected">
+            AND c.selected = 1
+        </if>
+        GROUP BY c.id
+        ORDER BY c.update_time DESC
+    </select>
+
+</mapper>

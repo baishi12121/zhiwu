@@ -66,4 +66,15 @@ public final class MallConstants {
 
     /** 商品热度排行榜 Key（ZSet，score 为热度分） */
     public static final String PRODUCT_HOT_RANK_KEY = "product:hot:rank";
+
+    // ---------- RabbitMQ（订单超时自动取消，延迟消息插件） ----------
+
+    /** 延迟交换机名（类型 x-delayed-message，需安装 rabbitmq_delayed_message_exchange 插件） */
+    public static final String MQ_ORDER_DELAY_EXCHANGE = "order.delay.exchange";
+    /** 延迟队列名（durable，存放待取消的订单 ID） */
+    public static final String MQ_ORDER_DELAY_QUEUE = "order.delay.queue";
+    /** 延迟路由键 */
+    public static final String MQ_ORDER_DELAY_ROUTING_KEY = "order.delay.routing.key";
+    /** 延迟消息头名（值为延迟毫秒数） */
+    public static final String MQ_X_DELAY_HEADER = "x-delay";
 }
