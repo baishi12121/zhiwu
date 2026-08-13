@@ -421,10 +421,14 @@ CREATE TABLE `order` (
   `received_at`         DATETIME        DEFAULT NULL            COMMENT '收货时间',
   `completed_at`        DATETIME        DEFAULT NULL            COMMENT '交易完成时间',
   `cancelled_at`        DATETIME        DEFAULT NULL            COMMENT '交易关闭时间',
+  `order_source`        TINYINT         NOT NULL DEFAULT 1      COMMENT '订单来源 1普通 2秒杀',
+  `activity_id`         BIGINT UNSIGNED DEFAULT NULL            COMMENT '秒杀活动ID（order_source=2 时必填）',
+  `seckill_item_id`     BIGINT UNSIGNED DEFAULT NULL            COMMENT '秒杀商品项ID，关联 seckill_item.id',
   `create_time`         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time`         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_order_no` (`order_no`),
+  UNIQUE KEY `uk_user_activity_item` (`user_id`, `activity_id`, `seckill_item_id`),
   KEY `idx_user_state` (`user_id`, `order_state`),
   KEY `idx_create_time` (`create_time` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单主表';
@@ -842,11 +846,50 @@ CREATE TABLE `seckill_item` (
   KEY `idx_activity_sort` (`activity_id`, `sort_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='秒杀活动商品项';
 
--- 秒杀活动示例数据（覆盖现有 SKU 1/7/10）
-INSERT INTO `seckill_activity` (`id`, `name`, `start_time`, `end_time`, `enabled`, `remark`) VALUES
-  (1, '8月限时秒杀', '2026-08-01 00:00:00', '2026-08-31 23:59:59', 1, '8 月整月秒杀专场');
+-- MQ 本地消息表（秒杀下单可靠投递凭证，配合 Publisher Confirm + 定时补偿实现消息不丢失）
+DROP TABLE IF EXISTS `mq_message`;
+CREATE TABLE `mq_message` (
+  `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `message_id`      VARCHAR(128)    NOT NULL                COMMENT '业务唯一ID（userId:activityId:seckillItemId）',
+  `user_id`         BIGINT UNSIGNED NOT NULL,
+  `activity_id`     BIGINT UNSIGNED NOT NULL,
+  `seckill_item_id` BIGINT UNSIGNED NOT NULL               COMMENT '秒杀商品项ID，关联 seckill_item.id（SKU 维度）',
+  `spu_id`          BIGINT UNSIGNED DEFAULT NULL           COMMENT '冗余 SPU 维度，便于对账',
+  `sku_id`          BIGINT UNSIGNED DEFAULT NULL           COMMENT '冗余 SKU 维度，便于对账',
+  `quantity`        INT             NOT NULL DEFAULT 1     COMMENT '购买数量',
+  `status`          TINYINT         NOT NULL DEFAULT 0      COMMENT '0-待扣库存 1-待发送 2-已发送 3-发送失败 4-已完成',
+  `retry_count`     INT             NOT NULL DEFAULT 0      COMMENT '重试次数',
+  `next_retry_time` DATETIME        DEFAULT NULL            COMMENT '下次重试时间',
+  `create_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_message_id` (`message_id`),
+  KEY `idx_status_next_time` (`status`, `next_retry_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='MQ 本地消息表（秒杀下单可靠投递凭证）';
 
-INSERT INTO `seckill_item` (`activity_id`, `spu_id`, `sku_id`, `seckill_price`, `seckill_stock`, `limit_per_user`, `sort_order`, `status`) VALUES
-  (1, 1, 1, 99.00,  50, 1, 1, 1),
-  (1, 2, 7, 39.00, 100, 2, 2, 1),
-  (1, 4, 10, 149.00, 30, 1, 3, 1);
+-- 秒杀库存补偿流水（Phase 2：下单失败/支付超时/用户取消/对账偏差触发回补，uk_message_id_type 防重复回补）
+DROP TABLE IF EXISTS `seckill_stock_compensate`;
+CREATE TABLE `seckill_stock_compensate` (
+  `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `message_id`      VARCHAR(128)    NOT NULL                COMMENT '关联业务messageId',
+  `activity_id`     BIGINT UNSIGNED NOT NULL,
+  `seckill_item_id` BIGINT UNSIGNED NOT NULL,
+  `user_id`         BIGINT UNSIGNED NOT NULL,
+  `quantity`        INT             NOT NULL,
+  `compensate_type` TINYINT         NOT NULL                COMMENT '1下单失败 2支付超时 3用户取消 4对账偏差',
+  `status`          TINYINT         NOT NULL DEFAULT 0      COMMENT '0待处理 1已完成 2失败',
+  `create_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_message_id_type` (`message_id`, `compensate_type`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='秒杀库存补偿流水';
+
+-- 秒杀种子数据（Phase 1 预热/压测用；依赖上方商品种子：product.id=1/4、product_sku.id=1/10）
+INSERT INTO `seckill_activity` (`id`, `name`, `start_time`, `end_time`, `enabled`, `remark`) VALUES
+  (1, '周年庆秒杀', '2026-08-01 00:00:00', '2026-12-31 23:59:59', 1, '示例活动：Phase 1 压测用，窗口覆盖当前时间');
+INSERT INTO `seckill_item` (`id`, `activity_id`, `spu_id`, `sku_id`, `seckill_price`, `seckill_stock`, `limit_per_user`, `sort_order`, `status`) VALUES
+  (1, 1, 1, 1,  99.00, 100, 1, 1, 1),
+  (2, 1, 4, 10, 199.00,  50, 1, 2, 1);
+
+

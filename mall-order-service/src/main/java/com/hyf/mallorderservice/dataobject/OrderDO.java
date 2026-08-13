@@ -70,4 +70,10 @@ public class OrderDO extends BaseEntity {
     private LocalDateTime completedAt;
     /** 交易关闭时间 */
     private LocalDateTime cancelledAt;
+    /** 订单来源：1普通 2秒杀 */
+    private Integer orderSource;
+    /** 秒杀活动 ID */
+    private Long activityId;
+    /** 秒杀商品项 ID */
+    private Long seckillItemId;
 }

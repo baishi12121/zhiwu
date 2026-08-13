@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hyf.mallseckillservice.mapper.MqMessageMapper">
+
+    <update id="updateStatusByMessageId">
+        UPDATE mq_message
+        SET status = #{status}
+        WHERE message_id = #{messageId}
+          AND status &lt; #{status}
+    </update>
+
+    <update id="markRetry">
+        UPDATE mq_message
+        SET retry_count = #{retryCount},
+            next_retry_time = #{nextRetryTime}
+        WHERE message_id = #{messageId}
+    </update>
+
+    <update id="resetFailedToSending">
+        UPDATE mq_message
+        SET status = 1
+        WHERE message_id = #{messageId}
+          AND status = 3
+    </update>
+
+    <select id="selectPendingSendForRetry" resultType="com.hyf.mallseckillservice.entity.MqMessageDO">
+        SELECT *
+        FROM mq_message
+        WHERE status = 1
+          AND (next_retry_time IS NULL OR next_retry_time &lt;= NOW())
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+</mapper>

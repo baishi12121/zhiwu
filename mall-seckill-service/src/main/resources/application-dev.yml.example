@@ -1,0 +1,8 @@
+# Local development profile template: copy to application-dev.yml and fill real values.
+spring:
+  datasource:
+    username: root
+    password: 123456
+  rabbitmq:
+    username: admin
+    password: 123456

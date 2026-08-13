@@ -104,9 +104,14 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
             // 4. 透传 userId 到下游请求头
             ServerHttpRequest mutated = request.mutate()
-                    .header(MallConstants.HEADER_AUTH, authHeader) // 原始 token 透传到下游
-                    .header("X-User-Id", userId != null ? userId : "")
-                    .header("X-User-Nickname", nickname != null ? nickname : "")
+                    .headers(headers -> {
+                        headers.remove(MallConstants.HEADER_AUTH);
+                        headers.remove("X-User-Id");
+                        headers.remove("X-User-Nickname");
+                        headers.add(MallConstants.HEADER_AUTH, authHeader);
+                        headers.add("X-User-Id", userId != null ? userId : "");
+                        headers.add("X-User-Nickname", nickname != null ? nickname : "");
+                    })
                     .build();
 
             return chain.filter(exchange.mutate().request(mutated).build());

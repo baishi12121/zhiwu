@@ -4,13 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`zhiwu-mall` is a Spring Boot 3.5.14 + Spring Cloud 2025.0.0 + Spring Cloud Alibaba 2023.0.1.2 microservices e-commerce system. Java 17, Maven multi-module. All services register with Nacos and are fronted by a Spring Cloud Gateway.
+`zhiwu-mall` is a Spring Boot 3.5.14 + Spring Cloud 2025.0.0 + Spring Cloud Alibaba 2023.0.1.2 microservices e-commerce system. Java 17, Maven multi-module (`packaging=pom`). All services register with Nacos and sit behind a Spring Cloud Gateway (WebFlux).
 
-Two frontend codebases exist:
-- **`uniapp-shop-vue3-ts/`** — uni-app + Vue 3 + TypeScript + Pinia 源码，编译到微信小程序（以及 H5/App 多端）
-- **`mp-weixin/`** — 原生微信小程序编译产物（`@dcloudio/uni-mp-weixin` 编译输出），包含 mock 接口层的旧版代码
+Three frontend/adjacent codebases exist alongside the Java services:
+- **`uniapp-shop-vue3-ts/`** — uni-app + Vue 3 + TypeScript + Pinia 微信小程序端（可编译 H5/App）。基于第三方「小兔鲜儿」模板，但 `http.ts` 已改造为适配本项目 `{ code, message, data }` 契约。
+- **`frontend-admin/`** — Vue 3 + Vite + Naive UI 管理后台（Vue 3 + Naive UI + ECharts），与 `mall-admin-service` 深度对接。
+- **`shopkeeper-agent/`** — Python/FastAPI + LangGraph 的 Text-to-SQL 智能客服 agent，由 `mall-ai-service` 做 SSE 透传代理。见「AI Customer Service」一节。
 
-**Current state = skeleton/DDD refactor in progress.** Most business services expose only a `GET /api/<area>/health` endpoint; controllers, application/domain services, and repository impls are placeholders (return `null`/`0` or empty). **Exceptions: `mall-auth-service` is fully implemented** (see below), and **`mall-ai-service` + `shopkeeper-agent` form a working AI customer-service system** (see AI Customer Service section). When implementing, fill these in — do not assume the target behavior already exists.
+**Current state: most business services are fully implemented** (see table below). Skeleton/placeholder areas: `mall-search-service` (no ES), `mall-seckill-service` (empty scaffold), `mall-auth-service` SMS login (mock). **The active work area is seckill** — schema and plan are done (see 「Seckill」), the runtime (Redis 扣库存 + MQ 下单闭环) is not yet implemented.
 
 ## Build & Run
 
@@ -23,413 +24,191 @@ mvn -f E:/zhiwu-mall/mall-product-service/pom.xml clean package -DskipTests
 
 # Run a single service (must cd into the module dir for spring-boot:run)
 cd E:/zhiwu-mall/mall-product-service && mvn spring-boot:run
-
-# AI agent (shopkeeper-agent) — Python/FastAPI
-cd E:/zhiwu-mall/shopkeeper-agent
-uv sync                              # install dependencies
-uv run python main.py                # start on :8090 (needs Qdrant/ES/Embedding running)
-# Or via Docker:
-cd docker && pwsh manage.ps1 up      # start all 5 services
-
-# Frontend (uniapp-shop-vue3-ts)
-cd E:/zhiwu-mall/uniapp-shop-vue3-ts && npm install && npm run dev:mp-weixin
 ```
 
-No tests exist (`src/test/` is absent) and there is no lint/checkstyle setup. `api_test.py` was removed in this refactor.
+No tests exist (no `src/test/` in any module) and there is no lint/checkstyle setup. `mvn test` will run nothing.
+
+### ⚠️ Dev profile step (required before running)
+
+Real credentials (MySQL/RabbitMQ/JWT/WeChat) are **not** committed. Each service that needs them ships an `application-dev.yml.example` template; the real `application-dev.yml` is gitignored. **Copy the template and fill in real values** for every service you intend to run:
+
+```bash
+cp E:/zhiwu-mall/mall-auth-service/src/main/resources/application-dev.yml.example \
+   E:/zhiwu-mall/mall-auth-service/src/main/resources/application-dev.yml
+# repeat for mall-user-service, mall-product-service, mall-order-service,
+# mall-marketing-service, mall-admin-service, mall-gateway-service
+```
+
+`mall-search-service`, `mall-ai-service` have no dev profile (no DB/Redis/MQ creds needed). **`mall-seckill-service`（开发秒杀时）需新增 dev profile**（MySQL/Redis/RabbitMQ 连接，见「Seckill」节）。The default profile is `dev` (`SPRING_PROFILES_ACTIVE` env overrides). The gateway requires a `mall.jwt.secret` ≥ 32 bytes and must match the secret services use to sign/verify tokens.
 
 ### Infrastructure (start before any service)
 
 ```bash
-docker compose -f E:/zhiwu-mall/docker-compose.yml up -d   # Nacos + Sentinel dashboard
-# For AI customer service, also start shopkeeper-agent's infrastructure:
-# cd E:/zhiwu-mall/shopkeeper-agent/docker && pwsh manage.ps1 up
+docker compose -f E:/zhiwu-mall/docker-compose.yml up -d   # Nacos + Sentinel dashboard ONLY
 ```
 
-Then ensure these are running locally:
-- **Nacos** `127.0.0.1:8848` — service discovery (also needs 9848/9849 gRPC ports; the compose file maps them)
-- **Sentinel Dashboard** `localhost:8858` — only referenced by `mall-marketing-service`
-- **MySQL** `localhost:3306`, user `root` / `123456` — **single database `mall`**. Initialize with `sql/init.sql`. Also create `meta` database with `shopkeeper-agent/docker/mysql/meta.sql` for the AI agent
+`docker-compose.yml` provides **only** Nacos (8848/9848/9849) and Sentinel dashboard (8858). **MySQL, Redis, and RabbitMQ are locally installed services, not containers.** Required local infra:
+
+- **Nacos** `127.0.0.1:8848` — service discovery
+- **Sentinel Dashboard** `localhost:8858` — referenced only by `mall-marketing-service`
+- **MySQL** `localhost:3306`, user `root` / `123456` — **single database `mall`**, initialized with `sql/init.sql` (now includes seckill tables). The AI agent also needs a `meta` database (from `shopkeeper-agent/docker/mysql/meta.sql`).
 - **Redis** `127.0.0.1:6379`, no password, database `1`
-- **RabbitMQ** `localhost:5672`, user `admin` / `123456`, vhost `/mall`
+- **RabbitMQ** `localhost:5672`, user `admin` / `123456`, vhost `/mall`. Must have the **`rabbitmq_delayed_message_exchange` plugin** installed (order timeout cancel uses a delayed exchange).
 
 ## Module Layout
 
-Root POM (`packaging=pom`) manages Spring Cloud BOMs and the 8 internal `mall-common-*` versions.
+Root POM manages Spring Cloud BOMs and the 8 internal `mall-common-*` versions.
 
 `mall-common/` — shared starters every business service composes (parent POM pulls in Lombok globally):
-- `mall-common-core` — `Result<T>`, `ResultCode` enum, `BizException`/`UnauthorizedException`, `PageQuery`/`PageResult`, `MallConstants`, `HttpClientUtil` (uses Apache HttpClient, 5s timeout on POST/JSON methods; `doGet` also has timeout configured)
-- `mall-common-web` — `GlobalExceptionHandler` (auto-applies via `@RestControllerAdvice`), `CorsConfig`, `LoginUserContext`. Depends on `spring-boot-starter-web` (servlet) — **do not add to the gateway**
-- `mall-common-mybatis` — `BaseEntity` (id/createTime/updateTime), MyBatis-Plus auto-config
-- `mall-common-redis` — `RedisConfig`: String keys + `GenericJackson2JsonRedisSerializer` (value carries type info)
-- `mall-common-rabbitmq` — `RabbitMqConfig`: single `Jackson2JsonMessageConverter` bean for all services
-- `mall-common-feign` — `FeignConfig` (RequestInterceptor that copies `Authorization`/`source-client` headers) + `FeignAuthHolder` (ThreadLocal)
-- `mall-common-security` — **Fully implemented**: `JwtTokenService` (jjwt HMAC-SHA256 签发/验签), `TokenAuthInterceptor` (解析 `Bearer xxx` 写入 `SecurityContextHolder`, 同时检查 Redis token 黑名单), `JwtStpLogic` (SaToken + JWT 联动), `SaTokenProperties` (白名单/exclude-paths)
-- `mall-common-oss` — **Fully implemented**: `OssController` (`POST /upload`, `GET /upload/download-url`), `OssService` (upload + presigned download), `AliOssProperties`. Auto-configured via `@ConditionalOnProperty(alioss.bucket-name)` — services that don't configure OSS won't create beans
+- `mall-common-core` — `Result<T>`, `ResultCode`/`ErrorCode`, `BizException`/`UnauthorizedException`, `PageQuery`/`PageResult`, `MallConstants`, `HttpClientUtil`
+- `mall-common-web` — `GlobalExceptionHandler` (`@RestControllerAdvice`), `CorsConfig`, `LoginUserContext`. **Servlet-based — do not add to the gateway.**
+- `mall-common-security` — `JwtTokenService` (jjwt HMAC-SHA256), `TokenAuthInterceptor`, `JwtStpLogic` (SaToken + JWT), `SaTokenProperties`. Only pulled in by `mall-user-service` and `mall-admin-service` today.
+- `mall-common-mybatis` — `BaseEntity` (id/createTime/updateTime), MyBatis-Plus autoconfig
+- `mall-common-redis` — `RedisConfig`: String keys + `GenericJackson2JsonRedisSerializer`
+- `mall-common-rabbitmq` — single `Jackson2JsonMessageConverter` bean
+- `mall-common-feign` — `FeignConfig` (copies `Authorization`/`source-client` headers) + `FeignAuthHolder` (ThreadLocal)
+- `mall-common-oss` — `OssController`/`OssService`/`AliOssProperties`, auto-configured via `@ConditionalOnProperty(alioss.bucket-name)`
 
 Business services (each `@EnableDiscoveryClient` + `@SpringBootApplication`):
-| Service | Port | Domain |
-|---|---|---|
-| `mall-gateway-service` | 8080 | Spring Cloud Gateway (WebFlux) — routes + `AuthGlobalFilter` (JWT 本地验签 + 白名单放行) |
-| `mall-user-service` | 8081 | user / address / favorite / footprint / cart — **skeleton**（profile 查询/修改 + 头像上传已实现） |
-| `mall-order-service` | 8082 | order aggregate (Order → OrderItem → OrderAddress → Payment) — **skeleton** |
-| `mall-marketing-service` | 8083 | coupon / seckill / group-buy / points (only service with Sentinel) |
-| `mall-product-service` | 8084 | category / product / SKU / stock — **skeleton** |
-| `mall-auth-service` | 8085 | **Fully implemented** — see Authentication section below |
-| `mall-search-service` | 8086 | ES search (ES not wired yet) |
-| `mall-ai-service` | 8087 | AI customer service — SSE proxy to shopkeeper-agent (Text-to-SQL via LangGraph) |
-| `mall-admin-service` | 8088 | admin backend — **skeleton** |
+
+| Service | Port | Status | Notes |
+|---|---|---|---|
+| `mall-gateway-service` | 8080 | Implemented | Routes + `AuthGlobalFilter` (JWT 本地验签 + 白名单) |
+| `mall-user-service` | 8081 | **Fully implemented** | Address, Cart, User profile/avatar (`com.hyf.malluserservice`, flat) |
+| `mall-order-service` | 8082 | **Fully implemented** (deepest) | Order CRUD + Pay (WeChat/Mock), MQ 延迟超时取消; `OrderApplicationService` 642 行 |
+| `mall-marketing-service` | 8083 | Implemented, narrow | Coupon only (`/coupons/**`); Sentinel; 秒杀/拼团/积分未做 |
+| `mall-product-service` | 8084 | **Fully implemented** (DDD) | Category/Home/Hot/Product; home/seckill read paths |
+| `mall-auth-service` | 8085 | Mostly complete | WeChat flows done; SMS mock/`smsLogin` throws |
+| `mall-search-service` | 8086 | **Skeleton** | Only `/search/health`; ES not wired |
+| `mall-ai-service` | 8087 | Implemented | Stateless SSE proxy to shopkeeper-agent |
+| `mall-admin-service` | 8088 | **Fully implemented** | 6 controllers: auth/banner/product/sales/seckill/user CRUD + dashboards |
+| `mall-seckill-service` | 8089 | **Empty scaffold** | Only the Application class; no logic |
+
+> ⚠️ `mall-seckill-service` (8089) shares a port with the shopkeeper-agent's TEI embedding container (also 8089 in its `docker-compose.yaml`) — they cannot run simultaneously.
+
+## Seckill (active work area)
+
+The seckill **plan is defined and schema is landed; the runtime is not implemented.** Read `doc/秒杀方案分阶段实施计划.md` first — it supersedes details in `doc/基于Redis和MQ实现秒杀订单加购.md` (the 终态 target design).
+
+### Schema (already applied to `sql/init.sql` and incrementally in `sql/_apply_seckill.sql`)
+
+- `seckill_activity` — 活动（启停时间、enabled）
+- `seckill_item` — **SKU 维度**（`seckill_price`/`seckill_stock`/`limit_per_user`, `uk_activity_sku(activity_id, sku_id)`）。替代原方案的 `seckill_product_stock`。
+- `order` 扩展：`order_source`(1普通/2秒杀)、`activity_id`、`seckill_item_id` + 唯一索引 `uk_user_activity_item(user_id, activity_id, seckill_item_id)`（幂等）。秒杀订单直接写 `order`，**不新建** `seckill_order` 表。
+- `mq_message` — 本地消息表（可靠投递凭证），状态机 0待扣库存→1待发送→2已发送→3发送失败→4已完成，`uk_message_id` 幂等。
+
+### Key design decisions (from the plan doc)
+
+- **业务主键统一 SKU 维度**：`messageId = userId:activityId:seckillItemId`，贯穿 Redis 幂等 Key、`mq_message.message_id`、`order.uk_user_activity_item`。
+- **订单状态共用** `order.order_state`（1待付款…6已取消），不引入独立状态机。
+- **Redis Key**（plan doc 为可读性省略前缀，**实现时统一加 `mall:` 前缀**，见 `MallConstants.REDIS_PREFIX`）：`seckill:stock:{activityId}:{seckillItemId}`、`seckill:item:{seckillItemId}`（商品项元数据缓存）、`seckill:user:{activityId}:{seckillItemId}:{userId}`、`seckill:order:{userId}:{activityId}:{seckillItemId}`（状态机 1PROCESSING/2SUCCESS/3FAILED，TTL 30min）。
+- **Lua 原子扣减**：单 Key 扣库存 + 用户限购校验（KEYS: stock + user，ARGV: 限购 TTL）。
+- **MQ 拓扑**：`seckill.exchange`(Direct, durable) / `seckill.order.queue`(durable)，Publisher Confirm + 手动 ACK；延迟交换机 `order.delay.exchange`(`x-delayed-message`) 做支付超时取消。
+- **Phase 1 服务边界**（plan 规定，2026-08-13 调整为集中式）：秒杀运行时**全部集中在 `mall-seckill-service`(8089)** —— 入口/预热/本地消息表(`mq_message`)/MQ 消费/订单创建/超时取消/库存回补；跨服务仅一处：order-service 取消秒杀订单(`order_source=2`)时 Feign 调 seckill-service `/internal/**` 回补。Phase 1 仅后端，前端秒杀页留到 Phase 2。
+- **验收指标（Phase 1）**：单机 500 QPS 无超卖/无丢消息/无重复订单，P99 < 800ms。
+
+> ✅ **架构张力已解决（2026-08-13）**：秒杀运行时就在网关路由的 `mall-seckill-service`(8089) 实现（原拆 marketing+order 的方案已废弃）。注意 `mall-seckill-service` 目前是空壳，开发前需补齐 dev profile + `mall-common-security`/`web`/`mybatis`/`redis`/`rabbitmq` 依赖；8089 与 TEI 容器端口冲突，调试秒杀时勿同时运行 shopkeeper-agent 的 TEI。
 
 ## Authentication (`mall-auth-service`)
 
-`mall-auth-service` directly accesses the `user` + `user_auth` tables in the `mall` database (not via Feign to user-service). JWT tokens use HMAC-SHA256 signed by `mall-common-security`. WeChat API calls (code2Session, access_token, getuserphonenumber) use `HttpClientUtil` — error messages now include WeChat's `errcode` and `errmsg` for debugging.
+`mall-auth-service` 直连 `mall` 库的 `user` + `user_auth` 表（不走 Feign）。JWT 由 `mall-common-security` 用 HMAC-SHA256 签发。密码目前仍为 **MD5**（与种子数据一致；`doc/隐患修复-08-密码MD5存储.md` 建议换 BCrypt，**尚未落地**）。微信 API 调用统一走 `HttpClientUtil` 并透传 `errcode`/`errmsg`。
 
-### Database tables
-
-- **`user`** — `id`, `account`, `nickname`, `password` (MD5), `mobile`, `avatar`, `gender`, `member_level`, `status`, `last_login_at`
-- **`user_auth`** — `id`, `user_id`, `identity_type` (USERNAME / PHONE / WECHAT), `identifier`, `credential`
-
-### Endpoints (all under `/auth/**`, whitelisted from token interceptor)
+Endpoints (all under `/auth/**`, whitelisted):
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/auth/login` | **手机号 + 密码登录** — `{phone, password}` → LoginResponse (含 JWT token 对) |
-| `POST` | `/auth/wxLogin` | **微信小程序登录（第一步）** — `{code, nickname?, avatar?}` → code2Session 拿 openid。**永远不签发 token**，统一返回 `needBindPhone=true` + `openid` + 已有手机号（老用户预填），需走手机号绑定流程后才能登录 |
-| `POST` | `/auth/bindWechatPhone` | **绑定手机号并登录（第二步）** — `{openid, phone}` → 三种场景：①手机号匹配已有用户则合并账号+删除临时用户；②绑定到临时用户；③临时用户已有该手机号则直接绑定。返回完整 LoginResponse（含 JWT token 对） |
-| `POST` | `/auth/bindWechatPhoneByCode` | **绑定手机号（phoneCode 解密）** — `{openid, phoneCode}` → 后端调微信 `getuserphonenumber` 解密 phoneCode 为真实手机号，再复用 `bindWechatPhone` 的合并/绑定逻辑。**需要小程序后台开通「手机号快速验证」能力** |
-| `POST` | `/auth/register` | **注册** — `{account, password, mobile, nickname}` → 写 user + USERNAME/PHONE 双凭证，自动登录 |
-| `POST` | `/auth/refreshToken` | **刷新 token** — `{refreshToken}` → 新 token 对 |
-| `GET` | `/auth/logout` | **退出** — 将 access token 写入 Redis 黑名单（key: `token:blacklist:<token>`，TTL 对齐 token 有效期），`TokenAuthInterceptor` 每次校验时检查黑名单 |
-| `POST` | `/auth/sms/send` | 发送短信验证码（骨架） |
-| `POST` | `/auth/sms/login` | 短信验证码登录（骨架） |
+| `POST` | `/auth/login` | 手机号+密码登录 → JWT token 对 |
+| `POST` | `/auth/wxLogin` | 微信第一步：code2Session 拿 openid，**永远不签发 token**，统一返回 `needBindPhone=true` + 预填手机号 |
+| `POST` | `/auth/bindWechatPhone` | 第二步：`{openid, phone}` 合并/绑定账号 → 签发 JWT |
+| `POST` | `/auth/bindWechatPhoneByCode` | `{openid, phoneCode}` 后端调微信解密再复用上面逻辑（需开通「手机号快速验证」，当前未启用） |
+| `POST` | `/auth/register` | 账号+手机号注册，写 USERNAME/PHONE 双凭证，自动登录 |
+| `POST` | `/auth/refreshToken` | 刷新 token 对 |
+| `GET` | `/auth/logout` | access token 写入 Redis 黑名单（`token:blacklist:`） |
+| `POST` | `/auth/sms/send` | **mock**（仅打日志） |
+| `POST` | `/auth/sms/login` | **未实现**（抛 `短信登录暂未实现`） |
 
-### Login flow
+Token rules: access 30min / refresh 7d；所有请求带 `Authorization: Bearer <accessToken>`（缺 `Bearer ` 前缀会 401）；前端 401 时清空 Pinia member store 跳登录页。
 
-```
-密码登录:
-  手机号+密码 → 查 user_auth(PHONE) → 验 user.password(MD5) → JWT
+## Gateway Routing (`mall-gateway-service/application.yml`)
 
-微信登录（统一流程，新老用户一致）:
-  ① wx.login() code → POST /auth/wxLogin → code2Session 拿 openid
-     ├─ 新用户: 自动注册临时用户 → { needBindPhone: true, openid, mobile: null }
-     └─ 老用户: { needBindPhone: true, openid, mobile: "138xxxx1234" }
-  ② 用户输入手机号 → POST /auth/bindWechatPhone { openid, phone }
-     → 合并/绑定账号 → 签发 JWT token 对
-  ③ 登录成功 → 跳转首页
-```
-
-> **注意**：`/auth/wxLogin` **永远不直接签发 token**。所有微信用户（无论新旧）都必须走手机号验证流程。老用户的已有手机号会预填在输入框中，点"允许"即可。
-
-### Token requirements (frontend)
-
-- Every authenticated request MUST carry `Authorization: Bearer <accessToken>` — **missing `Bearer ` prefix will cause 401**
-- Access token TTL: 30 min; Refresh token TTL: 7 days
-- On 401 response (code 401 or 1003), clear Pinia member store and redirect to `/pages/login/login`
-
-## AI Customer Service System (`mall-ai-service` + `shopkeeper-agent`)
-
-The AI customer service is a two-tier system: a Java microservice (`mall-ai-service`) acts as a transparent SSE proxy, forwarding user questions to a Python LangGraph agent (`shopkeeper-agent`) that performs Text-to-SQL querying against the `mall` database.
-
-### Architecture flow
-
-```
-[Uniapp Frontend]
-    | POST /ai/chat  (SSE, text/event-stream)
-    v
-[mall-ai-service :8087]  (Spring Boot — stateless SSE proxy)
-    | POST http://localhost:8090/api/query  (SSE)
-    v
-[shopkeeper-agent :8090]  (FastAPI + LangGraph — Text-to-SQL agent)
-    | SQL queries
-    v
-[MySQL mall database]  (the same `mall` DB used by all business services)
-```
-
-Side infrastructure used only by shopkeeper-agent:
-- **Qdrant** `:6333` — vector database, 2 collections (`column_info_collection`, `metric_info_collection`), 1024-dim Cosine similarity
-- **Elasticsearch** `:9200` — full-text index (`value_index`) with IK Chinese analyzer for column value search
-- **TEI (Text Embeddings Inference)** `:8089` — serves `BAAI/bge-large-zh-v1.5` for 1024-dim embeddings
-- **Meta MySQL database** `meta` — structured metadata (tables, columns, metrics, column-metric relationships), separate from the `mall` business DB
-
-These are started via `docker compose` in the shopkeeper-agent directory, separate from the main project's `docker-compose.yml`.
-
-### `mall-ai-service` — Java SSE proxy (port 8087)
-
-A thin stateless proxy layer. No database, no authentication, no AI logic — purely forwards SSE streams.
-
-**Dependencies**: `mall-common-web` (for `Result<T>`, CORS, exception handling), `spring-boot-starter-webflux` (for `WebClient`), Nacos discovery, Spring Cloud LoadBalancer. Does NOT depend on MyBatis, Redis, RabbitMQ, OSS, or Security.
-
-**Package structure** (`com.hyf.mallaiservice`):
-
-| Class | Role |
-|---|---|
-| `MallAiServiceApplication` | `@SpringBootApplication` + `@EnableDiscoveryClient` |
-| `config/AiServiceConfig` | Creates `WebClient` bean (`aiAgentWebClient`) pointing at shopkeeper-agent's base URL, with configurable timeout |
-| `controller/AiController` | REST controller — 3 endpoints (see below) |
-| `service/AiAgentService` | Core proxy: `chat(query)` returns `Flux<String>` by POSTing to shopkeeper-agent's `/api/query`, error → graceful SSE error message |
-| `properties/AiAgentProperties` | `@ConfigurationProperties(prefix="mall.ai.agent")` — `baseUrl`, `queryPath`, `timeoutMs` |
-| `dto/ChatRequest` | Inbound: `query` (String, `@NotBlank`, `@Size(max=500)`) |
-| `dto/AgentQueryRequest` | Outbound: `query` (String), mirrors shopkeeper-agent's `QuerySchema` |
-
-**Endpoints** (all under `/ai/**`, whitelisted at the gateway — no auth required):
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/ai/health` | Health check + shopkeeper-agent reachability test (probes `/docs`) |
-| `POST` | `/ai/chat` | **Main streaming endpoint** — returns `text/event-stream`. Forwards query to shopkeeper-agent, passes SSE events through unmodified |
-| `GET` | `/ai/chat/test` | Non-streaming test endpoint — `.blockLast()` on the full response |
-
-**Configuration** (`application.yml`):
-- `server.port: 8087`
-- `spring.mvc.async.request-timeout: 300000` (5 min — critical for long SSE streams; without this Tomcat kills the connection)
-- `mall.ai.agent.base-url: http://localhost:8090`
-- `mall.ai.agent.query-path: /api/query`
-- `mall.ai.agent.timeout-ms: 60000`
-
-### `shopkeeper-agent` — Python Text-to-SQL agent (port 8090)
-
-A production-grade intelligent data query agent. **Tech stack**: Python 3.14, FastAPI + uvicorn, LangGraph 1.1+, LangChain (OpenAI-compatible LLM), SQLAlchemy 2.0 + asyncmy (async MySQL), Qdrant (vector search), Elasticsearch (full-text search), HuggingFace TEI (embeddings), Jieba (Chinese NLP), Loguru (logging).
-
-**Package manager**: `uv` (`pyproject.toml` + `uv.lock`). **Linting**: Ruff + pre-commit.
-
-#### Project structure
-
-```
-shopkeeper-agent/
-├── main.py                    # FastAPI app (port 8090), CORS, request_id middleware
-├── conf/
-│   ├── app_config.yaml        # MySQL/Qdrant/ES/Embedding/LLM/logging config
-│   └── meta_config.yaml       # Knowledge base: 9 tables, 30+ columns, 4 metrics to index
-├── app/
-│   ├── agent/                 # LangGraph workflow
-│   │   ├── graph.py           # 12-node StateGraph definition
-│   │   ├── state.py           # DataAgentState (TypedDict — shared state across nodes)
-│   │   ├── context.py         # DataAgentContext (TypedDict — runtime dependencies, not in state)
-│   │   ├── llm.py             # LLM singleton (OpenAI-compatible, temperature=0)
-│   │   └── nodes/             # 12 node implementations
-│   ├── api/                   # FastAPI router, schemas, dependencies, lifespan
-│   ├── clients/               # Connection managers: MySQL, Qdrant, ES, Embedding
-│   ├── conf/                  # Python config loaders (OmegaConf + dataclasses)
-│   ├── core/                  # Loguru logging + request_id ContextVar
-│   ├── entities/              # Dataclasses: ColumnInfo, TableInfo, MetricInfo, ValueInfo
-│   ├── models/                # SQLAlchemy ORM models (meta DB: table_info, column_info, etc.)
-│   ├── prompt/                # Prompt file loader
-│   ├── repositories/          # Data access: Meta MySQL, DW MySQL, Qdrant, Elasticsearch
-│   ├── scripts/               # build_meta_knowledge.py — CLI for knowledge base indexing
-│   └── services/              # QueryService (orchestrates one query) + MetaKnowledgeService
-├── prompts/                   # 7 .prompt template files (Chinese)
-├── docker/                    # docker-compose, Dockerfile, entrypoint.sh, meta.sql, ES IK plugin
-└── docs/                      # Architecture diagrams
-```
-
-#### LangGraph pipeline (12 nodes, ~8 LLM calls per query)
-
-```
-START
-  → extract_keywords          (Jieba TF-IDF + POS filtering — no LLM)
-  → recoll_column             (LLM expands keywords → embed → Qdrant vector search)
-  → recoll_value              (LLM expands keywords → ES full-text search with IK analyzer)
-  → recoll_metric             (LLM expands keywords → embed → Qdrant vector search)
-    [3 parallel branches]
-  → merge_retrieved_info      (7 sub-steps: deduplicate, fill metric columns, merge values,
-                               organize by table, fill PK/FK, build TableInfo/MetricInfo state)
-  → filter_table              (LLM selects needed tables+columns from candidates)
-  → filter_metric             (LLM selects needed metrics from candidates)
-    [2 parallel branches]
-  → add_extra_context         (today's date/day-of-week/quarter + DB dialect/version)
-  → generate_sql              (LLM generates SQL from YAML-structured context)
-  → validate_sql              (EXPLAIN against real DB — no LLM)
-  → conditional edge:
-      error=None? → run_sql   (execute and stream results)
-      error≠None? → correct_sql (LLM fixes SQL) → run_sql
-```
-
-Every node emits `{"type": "progress", "step": "...", "status": "running/success/error"}` via SSE so the frontend sees real-time pipeline progress.
-
-#### Knowledge base (`conf/meta_config.yaml`)
-
-Defines what the agent knows about the database:
-
-- **9 tables** across 3 domains:
-  - Product: `product`, `product_sku`, `spec`, `spec_value`, `sku_spec_value`, `category`, `brand`
-  - Marketing: `coupon`
-  - Order: `order`, `order_item`
-- **4 metrics**: 商品价格 (product price), 商品库存 (inventory), 商品销量 (sales count), 订单实付金额 (order paid amount)
-- Each column specifies: `name`, `role` (primary_key/foreign_key/measure/dimension), `description`, `alias` list, `sync` flag (whether to index values in ES)
-
-#### API endpoint
-
-| Method | Path | Request | Response |
-|---|---|---|---|
-| `POST` | `/api/query` | `{"query": "统计华北地区销售总额"}` | `text/event-stream` SSE with 3 message types: `progress`, `result`, `error` |
-
-SSE message format:
-```json
-{"type": "progress", "step": "抽取关键词", "status": "success"}
-{"type": "result", "data": [{"销售总额": 123456.78}]}
-{"type": "error", "message": "SQL syntax error..."}
-```
-
-#### Database connections (all to host machine's MySQL)
-
-| Database | Host | Purpose |
-|---|---|---|
-| `meta` | `host.docker.internal:3306` | Structured metadata: table_info, column_info, metric_info, column_metric |
-| `mall` | `host.docker.internal:3306` | The real zhiwu-mall data warehouse for query execution |
-
-Both share the same MySQL instance as the main project. The `meta` database must be initialized with `docker/mysql/meta.sql` before first use.
-
-#### Docker deployment
-
-5 services in `docker/docker-compose.yaml`:
-- `elasticsearch` (custom build with IK plugin, `:9200`)
-- `kibana` (`:5601`, for ES exploration)
-- `qdrant` (`:6333`, vector DB)
-- `embedding` (TEI, `:8089` — port offset to avoid conflict with mall-user-service `:8081`)
-- `shopkeeper-agent` (built from `docker/Dockerfile`, `:8090`)
-
-MySQL is NOT containerized — the agent connects to the host machine's MySQL via `host.docker.internal`.
-
-**Entrypoint modes** (PowerShell: `docker/manage.ps1`):
-- `serve` — start FastAPI server (waits for Qdrant/ES/Embedding to be ready first)
-- `build` — run `build_meta_knowledge.py` to index the knowledge base, then exit
-
-#### Knowledge base initialization workflow
-
-Before the agent can answer questions, the knowledge base must be built:
-1. `MetaKnowledgeService` reads `meta_config.yaml`
-2. Queries the `mall` database for real column types (`SHOW COLUMNS`) and example values (`SELECT DISTINCT`)
-3. Persists metadata to Meta MySQL (`table_info`, `column_info`, `metric_info`, `column_metric`)
-4. Embeds column names/descriptions/aliases → upserts to Qdrant `column_info_collection`
-5. Embeds metric names/descriptions/aliases → upserts to Qdrant `metric_info_collection`
-6. Indexes column values for `sync: true` columns → bulk indexes to Elasticsearch `value_index`
-
-#### Prompt templates (7 `.prompt` files)
-
-| File | Used by | Output format |
-|---|---|---|
-| `extend_keywords_for_column_recall.prompt` | recall_column | JSON array |
-| `extend_keywords_for_metric_recall.prompt` | recall_metric | JSON array |
-| `extend_keywords_for_value_recall.prompt` | recall_value | JSON array |
-| `filter_table_info.prompt` | filter_table | JSON object |
-| `filter_metric_info.prompt` | filter_metric | JSON array |
-| `generate_sql.prompt` | generate_sql | Plain SQL (10 rules: SELECT only, backticks, LIMIT 20, no markdown, etc.) |
-| `correct_sql.prompt` | correct_sql | Plain SQL (minimum changes, preserve semantics) |
-
-#### LLM configuration
-
-- **Model**: `qwen3.6-flash` (via DashScope, OpenAI-compatible API)
-- **Base URL**: `https://dashscope.aliyuncs.com/compatible-mode/v1`
-- **Temperature**: 0 (deterministic SQL generation)
-- **API key**: Set via `LLM_API_KEY` in `.env`
-- Can be swapped to any OpenAI-compatible provider by changing `LLM_BASE_URL` and `LLM_MODEL_NAME`
-
-## Frontend (`uniapp-shop-vue3-ts`)
-
-### Tech stack
-uni-app 3.0 + Vue 3.2 + TypeScript 5.1 + Pinia 2.0 (with `pinia-plugin-persistedstate`) + Sass. Compiles to mp-weixin / H5 / App.
-
-### Directory structure
-```
-src/
-├── pages/          业务页面（login, index, category, cart, my, goods, hot）
-├── pagesMember/    会员分包（settings, profile, address）
-├── pagesOrder/     订单分包（create, detail, payment, list）
-├── services/       API 层（login, home, goods, cart, order, pay, profile, address, ai）
-├── stores/         Pinia stores（modules/member — 用户 token/profile 持久化）
-├── types/          TS 类型定义（member.d.ts, goods.d.ts, order.d.ts 等）
-├── utils/          http.ts（请求拦截器 + baseURL）
-├── components/     公共组件（XtxSwiper, XtxGuess, vk-data-goods-sku-popup）
-└── static/         图片/tabbar 图标
-```
-
-### Key patterns
-- **API base URL**: `import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'`（经网关）
-- **Token persistence**: Pinia `member` store → `persist: { storage: { getItem/setItem: uni.getStorageSync/setStorageSync } }`
-- **HTTP interceptor**: 自动拼接 baseURL、注入 `Authorization: Bearer <token>`、注入 `source-client: miniapp` header、401 自动清理登录态并跳转。错误消息由 http.ts 统一 toast，页面 catch 块只做 console.error 日志记录，不重复 toast。
-- **LoginResult type** (`src/types/member.d.ts`): `{userId, nickname, avatar, memberLevel, accessToken, refreshToken, expiresIn, needBindPhone?, openid?, mobile?}`
-- **AI chat**: `src/services/ai.ts` consumes the `/ai/chat` SSE endpoint. Entry point: "我的" page → 智能客服 button navigates to the chat page (`src/pages/my/my.vue` line ~79)
-
-### Login page behavior (`src/pages/login/login.vue`)
-
-微信登录当前使用**手机号输入绑定**流程（不依赖微信 `getPhoneNumber` 组件）：
-
-1. 点击"微信一键登录" → `wx.login()` 拿 code → `POST /auth/wxLogin` 拿 openid
-2. 弹出底部 Sheet："绑定手机号完成登录"
-   - 老用户：输入框预填已有手机号
-   - 新用户：需手动输入
-3. 点"允许" → `POST /auth/bindWechatPhone { openid, phone }` → 登录成功
-
-> `getPhoneNumber` 组件和 `/auth/bindWechatPhoneByCode` 端点已实现但**当前未使用**，如需启用需先去微信公众平台开通「手机号快速验证」能力。
-
-## Architecture
-
-### DDD layering (product-service & order-service only)
-These two are restructured into DDD packages; the other services are still flat (`controller/entity/mapper/service`). When working in product/order, follow this layering:
-```
-com.hyf.mall<name>service
-├── interfaces/rest/      Controller — protocol translation only
-├── application/service/  ApplicationService — orchestrates domain logic + @Transactional
-├── domain/
-│   ├── model/aggregate/  Aggregate root (holds invariants, e.g. OrderAggregate)
-│   ├── model/entity/     Entities extend BaseEntity
-│   ├── model/valueobject/
-│   ├── repository/        Repository interface (impl lives in infrastructure)
-│   ├── service/          DomainService — cross-entity logic
-│   └── event/            Domain events
-├── infrastructure/persistence/  RepositoryImpl, MyBatis mappers, DO↔domain conversion
-└── api/                  Feign client + DTO package for other services to call
-```
-Entities hold no behavior; behavior lives on the aggregate root.
-
-### Gateway routing (`mall-gateway-service/application.yml`)
-Routes map path prefixes to `lb://<service-name>` (note: **no `/api/` prefix** in actual routes):
+Routes (无 `/api/` 前缀):
 
 | Path Prefix | Service |
 |---|---|
 | `/auth/**` | mall-auth-service |
 | `/user/**`, `/cart/**`, `/avatar/**` | mall-user-service |
 | `/home/**`, `/categories/**`, `/products/**`, `/upload/**`, `/dict/**`, `/health/**` | mall-product-service |
-| `/orders/**` | mall-order-service |
+| `/orders/**`, `/pay/**` | mall-order-service |
 | `/coupons/**` | mall-marketing-service |
+| `/seckill/**` | mall-seckill-service (empty) |
 | `/search/**` | mall-search-service |
 | `/admin/**` | mall-admin-service |
 | `/ai/**` | mall-ai-service |
 
-**`/internal/**` is blocked at the gateway (returns 404)** — Feign calls bypass the gateway and hit service ports directly.
+**`/internal/**` is blocked at the gateway (SetStatus 404)** — Feign calls bypass the gateway and hit service ports directly (`MallConstants.INTERNAL_PREFIX`).
 
-### Gateway Auth Filter (`config/AuthGlobalFilter.java`)
+`AuthGlobalFilter` (order=-100) 白名单（免 token）：`/auth/**`, `/home/**`, `/categories/**`, `/products/**`, `/upload/**`, `/dict/**`, `/health/**`, `/avatar/**`, `/user/avatar/upload`, `/pay/wx/notify`, `/admin/login`, `/admin/health`, `/ai/chat`, `/ai/chat/**`, `/ai/health`, `/error`。其余路径须带 token，验签成功后注入 `X-User-Id`/`X-User-Nickname` 头并透传 Authorization。失败返回 `{"code":401,...}`。
 
-Global filter (order=-100) that validates JWT tokens at the gateway level using local jjwt verification:
+> ⚠️ **服务内鉴权缺失**（`doc/隐患修复-04-服务内鉴权缺失.md` 未落地）：`mall-product-service`、`mall-order-service`、`mall-marketing-service`、`mall-search-service`、`mall-ai-service` 未依赖 `mall-common-security`，controller 直接信任网关注入的 `X-User-Id`。绕过网关直连服务端口可伪造用户 ID。只有 user/admin 两个服务自校验 token。
 
-- **Whitelist** (no token required): `/auth/**`, `/home/**`, `/categories/**`, `/products/**`, `/upload/**`, `/dict/**`, `/health/**`, `/avatar/**`, `/user/avatar/upload`, `/error`
-- **Non-whitelisted paths**: require `Authorization: Bearer <token>`, JWT parsed and verified locally (same secret as services)
-- On success: injects `X-User-Id` and `X-User-Nickname` headers + forwards original `Authorization` to downstream
-- On failure: returns `{"code":401,"message":"<reason>","data":null}` (JSON, HTTP 401)
-- Explicit failure messages: "缺少访问令牌" / "访问令牌已过期" / "访问令牌无效"
+## Architecture & Conventions
 
-### Inter-service contracts
-The intended Feign call is order→product `POST /internal/products/decrease-stock` (declared in `ProductApiPackage` and the API doc), but it is **not yet implemented**. `FeignConfig` transparently forwards `Authorization`/`source-client` headers on every Feign call.
+### DDD layering (product-service & order-service only)
+
+这两个服务按 DDD 分层，其余服务仍是扁平 `controller/entity/mapper/service`。在 product/order 里开发时遵循：
+
+```
+com.hyf.mall<name>service
+├── controller/ 或 interfaces/rest/   Controller — protocol translation only
+├── service/ 或 application/service/   ApplicationService — orchestrates + @Transactional
+├── domain/  (product: entity/event/repository/service; order: repository/impl)
+├── dataobject/ + repository/impl + mapper/   infrastructure/persistence
+└── api/                               Feign client + DTO for other services
+```
+
+Entities/DTOs use Lombok `@Data`. DB entities extend `BaseEntity` (`id`/`createTime`/`updateTime`, maintained by MySQL `DEFAULT CURRENT_TIMESTAMP`). MyBatis: `map-underscore-to-camel-case: true`.
 
 ### Shared response/error model (mall-common-core + mall-common-web)
+
 - Every endpoint returns `Result<T>` → `{ code, message, data }`. Use `Result.success(data)` / `Result.error(code, msg)`.
-- Business codes: HTTP-style 200/400/401/403/404/429/500 plus domain codes 1001–1003 (user), 2001–2002 (product), 3001–3003 (coupon), 4001 (order) — defined in `ResultCode`. Throw `new BizException(ResultCode.X)` and `GlobalExceptionHandler` converts it to `Result.error(...)`. Validation errors (`@Valid`) are auto-collected.
+- `ResultCode` code-space: 2xx/4xx/5xx HTTP 语义，1xxx 用户域，2xxx 商品域，3xxx 优惠券域，4xxx 订单域，5xxx 支付域。抛 `new BizException(ResultCode.X)`，`GlobalExceptionHandler` 转成 `Result.error(...)`；`@Valid` 校验错误自动收集。
 - Paginated endpoints return `PageResult<T>` → `{ total, page, pageSize, list }`.
+- **Constants**: request headers, client types, Redis key templates (`coupon:stock:%d`, `product:hot:rank`, `token:blacklist:`, `REDIS_PREFIX="mall:"`), MQ delay exchange names, `INTERNAL_PREFIX` all live in `MallConstants` — reuse, don't redefine.
+- **New shared infra** goes in the relevant `mall-common-*` starter, not a business service.
 
-## Important: docs describe a design that is ahead of the code
+## Frontends
 
-`doc/` contains design intent, not current behavior. Treat it as a spec to implement against, but **verify against the code before trusting specifics** — the refactor changed several decisions the docs still assume:
-- **Single database `mall`**, not 4 per-service DBs (the old `mall_user/mall_product/mall_order/mall_coupon` were merged). Initialize with `sql/init.sql` (NOT `sql/mall.sql`). `undo_log`/Seata were removed.
-- **No Seata** — the `@GlobalTransactional` distributed-transaction flow described in the hot-rank and API docs has been dropped. Stock decrease for orders is intended to be a local MyBatis `UPDATE ... WHERE remain_stock >= ?` (not yet coded).
-- **No MQ code in src** — the click/order hot-ranking, coupon-seckill async consumers, and `ProductScoreMessageListener` exist only in `doc/商品热度排行榜设计文档.md`. `mall-common-rabbitmq` only provides the JSON converter bean.
-- `doc/小程序接口文档.md` is a third-party (Apifox "小兔鲜儿") contract the project has **not** adopted — it documents a different response shape (`msg`/`result`). The project's own contract is `doc/API接口文档.md` (`code`/`message`/`data`).
-- **Frontend-backend gap**: the uni-app frontend was built for a different API. Only `/auth/*`, `/user/profile`, and `/ai/chat` endpoints work end-to-end. Frontend calls to `/home/**`, `/cart/**`, `/orders/**`, `/pay/**`, `/member/**`, `/categories/top` have **no backend endpoint** yet and will fail. Gateway routes for `/cart/**` and `/avatar/**` go to `mall-user-service`, but the corresponding controllers don't exist.
+### `uniapp-shop-vue3-ts`（微信小程序）
 
-## Conventions to follow when adding code
+uni-app 3.0 + Vue 3 + TS + Pinia (`pinia-plugin-persistedstate`) + Sass。`src/`：`pages/`（首页/分类/购物车/我的/商品/热卖）、`pagesMember/`（设置/资料/地址）、`pagesOrder/`（下单/详情/支付/列表）、`services/`（API 层）、`stores/modules/member`（token/profile 持久化）、`utils/http.ts`、`components/`。
 
-- **Lombok**: entities and DTOs use `@Data`; the old rule of "no Lombok on entities" no longer applies (see `Product`, `OrderAggregate`).
-- **DB entities** extend `BaseEntity` (get `id`/`createTime`/`updateTime`); `createTime`/`updateTime` are maintained by MySQL `DEFAULT CURRENT_TIMESTAMP [ON UPDATE]`.
-- **MyBatis**: `mapper-locations: classpath:mapper/*.xml`, `map-underscore-to-camel-case: true`. Product/order services alias DOs under `infrastructure.persistence.dataobject`; user/marketing under `entity`.
-- **Constants**: Redis keys (`coupon:stock:%d`, `product:hot:rank`, `token:blacklist:`, `wechat:access_token`) and header names live in `MallConstants` — reuse rather than redefining.
-- **New common infra** should go in the relevant `mall-common-*` starter so all services inherit it (e.g. a token interceptor belongs in `mall-common-security`, not a business service).
-- **Error handling in WeChat API calls**: always log the full raw response and include `errcode` + `errmsg` in the thrown exception message so the error is traceable from both backend logs and frontend toast messages.
-- **`HttpClientUtil.doGet`** now has timeout config and reads error response bodies (previously swallowed non-200 responses). Both `doPost` and `doPost4Json` have null-safe `response.close()` in finally blocks.
+Key patterns:
+- baseURL: `import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'`（经网关）
+- `http.ts` 拦截器：注入 `Authorization: Bearer <token>` + `source-client: miniapp`，**按本项目 `{code,message,data}` 契约解析（code===200）**，401 自动清理登录态跳登录页，错误统一 toast。
+- 登录流程：`wx.login()` → `POST /auth/wxLogin` 拿 openid → 底部 Sheet 输入手机号 → `POST /auth/bindWechatPhone`。`getPhoneNumber` 组件未使用。
+- AI 客服入口：「我的」页 → 智能客服 → `src/services/ai.ts` 消费 `/ai/chat` SSE。
+
+### `frontend-admin`（管理后台）
+
+Vue 3 + Vite + TS + Pinia + Naive UI + ECharts。`npm run dev` 默认 5174，Vite 把 `/api/**` 代理到 `http://localhost:8080`（网关）。已对接：admin 登录/profile、sales 看板（overview/products/categories/trend）、商品/SKU/分类 CRUD、**秒杀活动与商品项 CRUD**（`/admin/seckill/**`）、用户状态/等级。
+
+```bash
+cd E:/zhiwu-mall/frontend-admin && npm install && npm run dev
+cd E:/zhiwu-mall/uniapp-shop-vue3-ts && npm install && npm run dev:mp-weixin
+```
+
+## AI Customer Service (`mall-ai-service` + `shopkeeper-agent`)
+
+两层结构：`mall-ai-service`(8087) 是无状态 SSE 代理（WebClient 透传，无 DB/无鉴权），把 `/ai/chat` 的 query 转发给 Python agent；`shopkeeper-agent`(8090, FastAPI + LangGraph) 做 Text-to-SQL 查询 `mall` 库，经 12 节点 StateGraph（Jieba 关键词 → Qdrant/ES 召回 → LLM 过滤/生成 SQL → EXPLAIN 校验 → 执行），SSE 输出 `progress`/`result`/`error` 三态。
+
+- 侧边基础设施（仅在 `shopkeeper-agent/docker` 内）：Qdrant `:6333`、Elasticsearch `:9200`（IK 插件）、TEI embedding `:8089`、`meta` 元数据库。`docker/manage.ps1 up` 一键启动（`build` 模式建知识库，`serve` 模式起服务）。
+- 运行：`cd shopkeeper-agent && uv sync && uv run python main.py`（需 LLM API key 配在 `.env`，默认 DashScope `qwen3.6-flash`）。
+- LLM/知识库/提示词等细节见 `shopkeeper-agent/README.md` 与 `doc/`，本文件不再展开。
+
+## Docs status: design intent may be ahead of the code
+
+`doc/` 是设计文档，部分描述当前代码尚未实现或已被改动。**动手前以代码为准，文档作为 spec 参考**：
+
+- `doc/秒杀方案分阶段实施计划.md`（当前秒杀工作依据）、`doc/API接口文档.md`（本项目契约，`code/message/data`）是权威。`doc/小程序接口文档.md` 是第三方「小兔鲜儿」契约，**未采用**。
+- `doc/隐患修复-01..08` 是问题描述 + 修复方案文档：**01**（凭据出库，已通过 gitignore + dev profile 落地）、**04**（服务内鉴权，**未落地**）、**05/06**（秒杀维度/闭环，已并入秒杀方案）、**07**（延迟交换机参数，已修复）、**08**（MD5→BCrypt，**未落地**）。
+- 若实现秒杀，先核对 `doc/基于Redis和MQ实现秒杀订单加购.md` 中的 `productId` 表述已按 SKU 维度统一为 `seckillItemId`。

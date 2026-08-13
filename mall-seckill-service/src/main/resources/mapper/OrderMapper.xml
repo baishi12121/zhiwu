@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hyf.mallseckillservice.mapper.OrderMapper">
+
+    <select id="selectByUserActivityItem" resultType="com.hyf.mallseckillservice.entity.OrderDO">
+        SELECT *
+        FROM `order`
+        WHERE user_id = #{userId}
+          AND activity_id = #{activityId}
+          AND seckill_item_id = #{seckillItemId}
+        LIMIT 1
+    </select>
+
+    <select id="selectByOrderNo" resultType="com.hyf.mallseckillservice.entity.OrderDO">
+        SELECT *
+        FROM `order`
+        WHERE order_no = #{orderNo}
+        LIMIT 1
+    </select>
+
+    <update id="cancelPendingOrder">
+        UPDATE `order`
+        SET order_state = 6,
+            cancel_reason = #{cancelReason},
+            cancelled_at = #{cancelledAt}
+        WHERE id = #{id}
+          AND order_state = 1
+    </update>
+
+    <select id="selectExpiredPendingSeckillOrders" resultType="com.hyf.mallseckillservice.entity.OrderDO">
+        SELECT *
+        FROM `order`
+        WHERE order_source = 2
+          AND order_state = 1
+          AND pay_latest_time &lt; #{now}
+        ORDER BY pay_latest_time ASC
+        LIMIT #{limit}
+    </select>
+</mapper>

@@ -12,3 +12,41 @@ spring:
         server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         register-enabled: ${NACOS_REGISTER_ENABLED:true}
         fail-fast: ${NACOS_FAIL_FAST:false}
+  datasource:
+    url: ${MALL_DB_URL:jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai}
+    username: ${MALL_DB_USERNAME:mall_app}
+    password: ${MALL_DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password:
+      database: 1
+      timeout: 3000ms
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: ${RABBITMQ_USERNAME:mall_app}
+    password: ${RABBITMQ_PASSWORD:}
+    virtual-host: /mall
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 1
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.hyf.mallseckillservice.entity
+  configuration:
+    map-underscore-to-camel-case: true
+
+mall:
+  jwt:
+    secret: ${MALL_JWT_SECRET:}
+  security:
+    enabled: true
+    exclude-paths:
+      - /internal/**
