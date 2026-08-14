@@ -19,6 +19,7 @@ const router = createRouter({
         { path: 'products', name: 'products', component: () => import('@/views/ProductsView.vue') },
         { path: 'banners', name: 'banners', component: () => import('@/views/BannersView.vue') },
         { path: 'seckill', name: 'seckill', component: () => import('@/views/SeckillView.vue') },
+        { path: 'orders', name: 'orders', component: () => import('@/views/OrdersView.vue') },
         { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue') },
       ],
     },

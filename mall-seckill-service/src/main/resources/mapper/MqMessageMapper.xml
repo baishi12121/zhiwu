@@ -19,7 +19,9 @@
 
     <update id="resetFailedToSending">
         UPDATE mq_message
-        SET status = 1
+        SET status = 1,
+            retry_count = 0,
+            next_retry_time = DATE_ADD(NOW(), INTERVAL 60 SECOND)
         WHERE message_id = #{messageId}
           AND status = 3
     </update>

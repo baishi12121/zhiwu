@@ -9,6 +9,9 @@ import com.hyf.mallseckillservice.service.SeckillApplicationService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -16,6 +19,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class SeckillControllerTest {
 
@@ -48,5 +53,27 @@ class SeckillControllerTest {
         controller.result(20L, 30L);
 
         verify(service).result(10L, 20L, 30L);
+    }
+
+    @Test
+    void executeIgnoresSpoofedUserIdHeader() throws Exception {
+        SeckillApplicationService service = mock(SeckillApplicationService.class);
+        when(service.execute(any(), eq(20L), any())).thenReturn(new ExecuteResultDTO("queued", "msg-1"));
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new SeckillController(service)).build();
+        SecurityContextHolder.set(LoginUser.builder().userId(10L).build());
+
+        mockMvc.perform(post("/seckill/20/execute")
+                        .header("X-User-Id", "99")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "seckillItemId": 30,
+                                  "quantity": 1,
+                                  "addressId": 40
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        verify(service).execute(eq(10L), eq(20L), any());
     }
 }

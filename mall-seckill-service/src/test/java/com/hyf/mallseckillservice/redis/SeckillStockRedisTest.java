@@ -20,20 +20,26 @@ import static org.mockito.Mockito.when;
 class SeckillStockRedisTest {
 
     @Test
-    void tryDeductExecutesLuaWithStockAndUserKeys() {
+    void tryDeductExecutesLuaWithStockUserAndInflightKeys() {
         StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
-        when(redisTemplate.execute(any(RedisScript.class), any(List.class), eq("1800"), eq("2"), eq("5")))
+        when(redisTemplate.execute(any(RedisScript.class), any(List.class),
+                eq("1800"), eq("2"), eq("5"), eq("30:10:20")))
                 .thenReturn(SeckillConstants.REDIS_OK);
         SeckillStockRedis stockRedis = new SeckillStockRedis(redisTemplate);
 
-        long result = stockRedis.tryDeduct(10L, 20L, 30L, 2, 5, 1800);
+        long result = stockRedis.tryDeduct(10L, 20L, 30L, 2, 5, 1800, "30:10:20");
 
         assertThat(result).isEqualTo(SeckillConstants.REDIS_OK);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<String>> keysCaptor = ArgumentCaptor.forClass(List.class);
-        verify(redisTemplate).execute(any(RedisScript.class), keysCaptor.capture(), eq("1800"), eq("2"), eq("5"));
+        verify(redisTemplate).execute(any(RedisScript.class), keysCaptor.capture(),
+                eq("1800"), eq("2"), eq("5"), eq("30:10:20"));
         assertThat(keysCaptor.getValue())
-                .containsExactly("mall:seckill:stock:10:20", "mall:seckill:user:10:20:30");
+                .containsExactly(
+                        "mall:seckill:stock:10:20",
+                        "mall:seckill:user:10:20:30",
+                        "mall:seckill:inflight:30:10:20",
+                        "mall:seckill:inflight:index");
     }
 
     @Test

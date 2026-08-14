@@ -17,6 +17,12 @@ public final class SeckillConstants {
     public static final String USER_KEY = MallConstants.REDIS_PREFIX + "seckill:user:%d:%d:%d";
     public static final String ORDER_KEY = MallConstants.REDIS_PREFIX + "seckill:order:%d:%d:%d";
     public static final String RESTORE_KEY = MallConstants.REDIS_PREFIX + "seckill:restore:%s";
+    /** 活动结束时间缓存 key：预热时写入活动结束时间戳(epoch ms)，入口校验活动启停不再每请求查库。 */
+    public static final String ACTIVITY_KEY = MallConstants.REDIS_PREFIX + "seckill:activity:%d";
+    /** 在途扣减标记 key（单条）：Redis 已扣库存但 mq_message 尚未落库时存在，值为 "quantity:epochSeconds"。 */
+    public static final String INFLIGHT_KEY = MallConstants.REDIS_PREFIX + "seckill:inflight:%s";
+    /** 在途扣减索引（Redis SET）：Lua 扣减成功时原子 SADD messageId，补偿任务据此回收崩溃遗留的预扣。 */
+    public static final String INFLIGHT_INDEX_KEY = MallConstants.REDIS_PREFIX + "seckill:inflight:index";
 
     /** 下单消息队列：Redis 预占成功后投递，消费者异步建单。 */
     public static final String SECKILL_EXCHANGE = "seckill.exchange";
@@ -33,6 +39,10 @@ public final class SeckillConstants {
     public static final int MSG_SENT = 2;
     public static final int MSG_SEND_FAILED = 3;
     public static final int MSG_DONE = 4;
+    /** 落库后给 MQ 发送预留的宽限期（秒）：防止 confirm 尚未回来就被 retryExpired 立即重投。 */
+    public static final int MSG_SEND_GRACE_SECONDS = 60;
+    /** 补偿任务回收在途预扣的最小存活宽限（秒）：小于该值视为仍在正常链路内，跳过避免误回收。 */
+    public static final int INFLIGHT_GRACE_SECONDS = 60;
 
     public static final int ORDER_STATE_PENDING_PAY = 1;
     public static final int ORDER_STATE_CANCELLED = 6;
@@ -70,5 +80,13 @@ public final class SeckillConstants {
 
     public static String restoreKey(String orderNo) {
         return RESTORE_KEY.formatted(orderNo);
+    }
+
+    public static String activityKey(Long activityId) {
+        return ACTIVITY_KEY.formatted(activityId);
+    }
+
+    public static String inflightKey(String messageId) {
+        return INFLIGHT_KEY.formatted(messageId);
     }
 }

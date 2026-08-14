@@ -9,6 +9,7 @@ import {
   FlashOutline,
   ImagesOutline,
   LogOutOutline,
+  PaperPlaneOutline,
   PeopleOutline,
   StorefrontOutline,
 } from '@vicons/ionicons5'
@@ -43,6 +44,11 @@ const menuOptions: MenuOption[] = [
     label: () => h(RouterLink, { to: '/seckill' }, { default: () => '秒杀管理' }),
     key: '/seckill',
     icon: renderIcon(FlashOutline),
+  },
+  {
+    label: () => h(RouterLink, { to: '/orders' }, { default: () => '订单管理' }),
+    key: '/orders',
+    icon: renderIcon(PaperPlaneOutline),
   },
   {
     label: () => h(RouterLink, { to: '/users' }, { default: () => '用户管理' }),

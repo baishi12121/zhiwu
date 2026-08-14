@@ -6,7 +6,6 @@ import com.hyf.mallseckillservice.entity.MqMessageDO;
 public interface MqMessageService {
 
     public void createPending(SeckillOrderMessageDTO dto);
-    public void markSending(String messageId);
     public void resetFailedToSending(String messageId);
     public void markSent(String messageId);
     public void markFailed(String messageId);

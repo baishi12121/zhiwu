@@ -172,3 +172,90 @@ export interface SalesOverview {
   totalUsers?: number
   [key: string]: unknown
 }
+
+export interface AdminOrder extends BaseEntity {
+  orderNo: string
+  userId: EntityId
+  nickname?: string
+  orderState: number
+  orderSource: number
+  totalMoney?: number
+  payMoney: number
+  postFee?: number
+  discountAmount?: number
+  payType?: number
+  payChannel?: number
+  deliveryTimeType?: number
+  buyerMessage?: string
+  receiverContact?: string
+  receiverMobile?: string
+  receiverAddress?: string
+  cancelReason?: string
+  payLatestTime?: string
+  paidAt?: string
+  shippedAt?: string
+  receivedAt?: string
+  completedAt?: string
+  cancelledAt?: string
+  activityId?: EntityId
+  seckillItemId?: EntityId
+  itemImage?: string
+  itemName?: string
+  itemCount?: number
+  totalNum?: number
+  items?: AdminOrderItem[]
+  statusLogs?: AdminOrderStatusLog[]
+  logistics?: OrderLogistics | null
+}
+
+export interface AdminOrderItem extends BaseEntity {
+  orderId: EntityId
+  skuId?: EntityId
+  spuId: EntityId
+  skuCode?: string
+  name: string
+  image?: string
+  attrsText?: string
+  curPrice?: number
+  price?: number
+  quantity: number
+  subtotal?: number
+  realPay?: number
+  properties?: string
+}
+
+export interface AdminOrderStatusLog extends BaseEntity {
+  orderId: EntityId
+  fromState?: number
+  toState: number
+  operator?: 'USER' | 'SYSTEM' | 'ADMIN' | string
+  remark?: string
+}
+
+export interface LogisticsCompany {
+  id: EntityId
+  name: string
+  code?: string
+  tel?: string
+  sortOrder?: number
+}
+
+export interface OrderLogistics {
+  id: EntityId
+  orderId: EntityId
+  companyId?: EntityId
+  companyName?: string
+  companyCode?: string
+  companyTel?: string
+  logisticsNo?: string
+  createTime?: string
+  track?: OrderLogisticsTrack[]
+}
+
+export interface OrderLogisticsTrack {
+  id: EntityId
+  orderLogisticsId: EntityId
+  content: string
+  occurTime: string
+  sortOrder?: number
+}

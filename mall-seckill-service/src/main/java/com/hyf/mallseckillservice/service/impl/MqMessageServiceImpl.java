@@ -41,7 +41,8 @@ public class MqMessageServiceImpl implements MqMessageService {
     private final ObjectMapper objectMapper;
 
     public void createPending(SeckillOrderMessageDTO dto) {
-        // 创建待扣减记录，和 messageId 唯一键一起实现用户维度幂等。
+        // 库存已在 Redis 预扣，这里直接落「待发送」态并预留发送宽限，跳过原「待扣库存」中间态，
+        // 使刚落库的消息不会被 retryExpired 立即扫到重投。messageId 唯一键兜底用户维度幂等。
         MqMessageDO message = new MqMessageDO();
         message.setMessageId(dto.getMessageId());
         message.setUserId(dto.getUserId());
@@ -50,21 +51,15 @@ public class MqMessageServiceImpl implements MqMessageService {
         message.setSpuId(dto.getSpuId());
         message.setSkuId(dto.getSkuId());
         message.setQuantity(dto.getQuantity());
-        message.setStatus(SeckillConstants.MSG_PENDING_DEDUCT);
+        message.setStatus(SeckillConstants.MSG_PENDING_SEND);
         message.setRetryCount(0);
+        message.setNextRetryTime(LocalDateTime.now().plusSeconds(SeckillConstants.MSG_SEND_GRACE_SECONDS));
         mqMessageMapper.insert(message);
     }
 
-    public void markSending(String messageId) {
-        mqMessageMapper.updateStatusByMessageId(messageId, SeckillConstants.MSG_PENDING_SEND);
-        // 给刚发送的消息 60s 宽限期，防止 confirm 尚未回来就被 retryExpired 立即重投。
-        mqMessageMapper.markRetry(messageId, 0, LocalDateTime.now().plusSeconds(60));
-    }
-
     public void resetFailedToSending(String messageId) {
-        // 只有失败状态可以被重新打开；普通状态更新仍保持单调前进。
+        // 只有失败状态可以被重新打开；单条 UPDATE 同时重置重试次数与发送宽限（见 MqMessageMapper.xml）。
         mqMessageMapper.resetFailedToSending(messageId);
-        mqMessageMapper.markRetry(messageId, 0, LocalDateTime.now().plusSeconds(60));
     }
 
     public void markSent(String messageId) {

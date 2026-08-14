@@ -2,6 +2,8 @@ package com.hyf.mallseckillservice.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hyf.mallseckillservice.constant.SeckillConstants;
+import com.hyf.mallseckillservice.dto.SeckillOrderMessageDTO;
+import com.hyf.mallseckillservice.entity.MqMessageDO;
 import com.hyf.mallseckillservice.mapper.MqMessageMapper;
 import com.hyf.mallseckillservice.redis.SeckillStockRedis;
 import com.hyf.mallseckillservice.service.impl.MqMessageServiceImpl;
@@ -13,14 +15,13 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 class MqMessageServiceTest {
 
     @Test
-    void markSendingSetsRetryWindowSoFreshMessagesAreNotImmediatelyRetried() {
+    void createPendingWritesPendingSendStateWithRetryGraceWindow() {
         MqMessageMapper mapper = mock(MqMessageMapper.class);
         MqMessageService service = new MqMessageServiceImpl(
                 mapper,
@@ -28,15 +29,25 @@ class MqMessageServiceTest {
                 mock(SeckillStockRedis.class),
                 new ObjectMapper());
         LocalDateTime before = LocalDateTime.now();
+        SeckillOrderMessageDTO dto = new SeckillOrderMessageDTO();
+        dto.setMessageId("msg-1");
+        dto.setUserId(10L);
+        dto.setActivityId(20L);
+        dto.setSeckillItemId(30L);
+        dto.setSpuId(40L);
+        dto.setSkuId(50L);
+        dto.setQuantity(1);
 
-        service.markSending("msg-1");
+        service.createPending(dto);
 
-        verify(mapper).updateStatusByMessageId("msg-1", SeckillConstants.MSG_PENDING_SEND);
-        ArgumentCaptor<LocalDateTime> nextRetryCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
-        verify(mapper).markRetry(eq("msg-1"), eq(0), nextRetryCaptor.capture());
-        LocalDateTime nextRetryTime = nextRetryCaptor.getValue();
-        assertThat(nextRetryTime).isAfterOrEqualTo(before.plusSeconds(55));
-        assertThat(nextRetryTime).isBeforeOrEqualTo(before.plus(Duration.ofSeconds(65)));
+        ArgumentCaptor<MqMessageDO> captor = ArgumentCaptor.forClass(MqMessageDO.class);
+        verify(mapper).insert(captor.capture());
+        MqMessageDO message = captor.getValue();
+        // 库存已在 Redis 预扣，落库即「待发送」，并预留 60s 宽限避免被 retryExpired 立即重投。
+        assertThat(message.getStatus()).isEqualTo(SeckillConstants.MSG_PENDING_SEND);
+        assertThat(message.getRetryCount()).isEqualTo(0);
+        assertThat(message.getNextRetryTime()).isAfterOrEqualTo(before.plusSeconds(55));
+        assertThat(message.getNextRetryTime()).isBeforeOrEqualTo(before.plus(Duration.ofSeconds(65)));
     }
 
     @Test

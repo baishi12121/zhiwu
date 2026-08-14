@@ -13,10 +13,16 @@ spring:
         register-enabled: ${NACOS_REGISTER_ENABLED:true}
         fail-fast: ${NACOS_FAIL_FAST:false}
   datasource:
-    url: ${MALL_DB_URL:jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai}
+    url: ${MALL_DB_URL:jdbc:mysql://localhost:3306/mall?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
     username: ${MALL_DB_USERNAME:mall_app}
     password: ${MALL_DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # 秒杀入口的 DB 访问已收敛为「仅胜者落库」，但异步建单消费端仍会并发写订单；
+      # 默认 10 连接在高并发下是硬瓶颈，这里放宽到 50。
+      maximum-pool-size: 50
+      minimum-idle: 10
+      pool-name: SeckillHikariCP
   data:
     redis:
       host: 127.0.0.1
@@ -35,7 +41,10 @@ spring:
     listener:
       simple:
         acknowledge-mode: manual
-        prefetch: 1
+        # 并发消费 + 高 prefetch：让异步建单能跟上持续高 QPS，避免单线程逐条消费成为新瓶颈。
+        prefetch: 50
+        concurrency: 5
+        max-concurrency: 10
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml

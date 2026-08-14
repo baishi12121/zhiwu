@@ -48,6 +48,13 @@ public class SeckillTaskImpl implements SeckillTask, ApplicationRunner {
         mqMessageService.retryExpired(200);
     }
 
+    // 回收「Redis 已预扣但 mq_message 未落库」的崩溃遗留，防止进程崩溃导致库存泄漏。
+    // Phase 1 is single-instance; Phase 2 should guard this scan with a distributed lock.
+    @Scheduled(fixedDelay = 30_000L)
+    public void recoverOrphanInflightDeducts() {
+        seckillApplicationService.recoverOrphanInflightDeducts();
+    }
+
     @Scheduled(fixedDelay = 60_000L)
     public void cancelExpiredOrders() {
         for (OrderDO order : orderMapper.selectExpiredPendingSeckillOrders(java.time.LocalDateTime.now(), 100)) {

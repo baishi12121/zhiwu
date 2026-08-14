@@ -11,7 +11,7 @@ Three frontend/adjacent codebases exist alongside the Java services:
 - **`frontend-admin/`** — Vue 3 + Vite + Naive UI 管理后台（Vue 3 + Naive UI + ECharts），与 `mall-admin-service` 深度对接。
 - **`shopkeeper-agent/`** — Python/FastAPI + LangGraph 的 Text-to-SQL 智能客服 agent，由 `mall-ai-service` 做 SSE 透传代理。见「AI Customer Service」一节。
 
-**Current state: most business services are fully implemented** (see table below). Skeleton/placeholder areas: `mall-search-service` (no ES), `mall-seckill-service` (empty scaffold), `mall-auth-service` SMS login (mock). **The active work area is seckill** — schema and plan are done (see 「Seckill」), the runtime (Redis 扣库存 + MQ 下单闭环) is not yet implemented.
+**Current state: most business services are fully implemented** (see table below). Skeleton/placeholder areas: `mall-search-service` (no ES), `mall-auth-service` SMS login (mock). `mall-seckill-service` **runtime is implemented (Phase 1 完成)** — Redis 扣库存 + MQ 下单闭环已落地并压测通过（见 「Seckill」）。
 
 ## Build & Run
 
@@ -82,13 +82,13 @@ Business services (each `@EnableDiscoveryClient` + `@SpringBootApplication`):
 | `mall-search-service` | 8086 | **Skeleton** | Only `/search/health`; ES not wired |
 | `mall-ai-service` | 8087 | Implemented | Stateless SSE proxy to shopkeeper-agent |
 | `mall-admin-service` | 8088 | **Fully implemented** | 6 controllers: auth/banner/product/sales/seckill/user CRUD + dashboards |
-| `mall-seckill-service` | 8089 | **Empty scaffold** | Only the Application class; no logic |
+| `mall-seckill-service` | 8089 | **Fully implemented** | 秒杀入口(Redis 原子预扣)/预热/本地消息表/MQ 消费/订单创建/超时取消/库存回补/在途补偿 |
 
 > ⚠️ `mall-seckill-service` (8089) shares a port with the shopkeeper-agent's TEI embedding container (also 8089 in its `docker-compose.yaml`) — they cannot run simultaneously.
 
 ## Seckill (active work area)
 
-The seckill **plan is defined and schema is landed; the runtime is not implemented.** Read `doc/秒杀方案分阶段实施计划.md` first — it supersedes details in `doc/基于Redis和MQ实现秒杀订单加购.md` (the 终态 target design).
+The seckill **schema is landed and the Phase 1 runtime is implemented**（Redis 原子预扣 + MQ 下单闭环）。Read `doc/秒杀方案分阶段实施计划.md` first — it supersedes details in `doc/基于Redis和MQ实现秒杀订单加购.md` (the 终态 target design)。性能压测见 `doc/秒杀压测结果-2026-08-13.md`。
 
 ### Schema (already applied to `sql/init.sql` and incrementally in `sql/_apply_seckill.sql`)
 
@@ -101,13 +101,15 @@ The seckill **plan is defined and schema is landed; the runtime is not implement
 
 - **业务主键统一 SKU 维度**：`messageId = userId:activityId:seckillItemId`，贯穿 Redis 幂等 Key、`mq_message.message_id`、`order.uk_user_activity_item`。
 - **订单状态共用** `order.order_state`（1待付款…6已取消），不引入独立状态机。
-- **Redis Key**（plan doc 为可读性省略前缀，**实现时统一加 `mall:` 前缀**，见 `MallConstants.REDIS_PREFIX`）：`seckill:stock:{activityId}:{seckillItemId}`、`seckill:item:{seckillItemId}`（商品项元数据缓存）、`seckill:user:{activityId}:{seckillItemId}:{userId}`、`seckill:order:{userId}:{activityId}:{seckillItemId}`（状态机 1PROCESSING/2SUCCESS/3FAILED，TTL 30min）。
-- **Lua 原子扣减**：单 Key 扣库存 + 用户限购校验（KEYS: stock + user，ARGV: 限购 TTL）。
-- **MQ 拓扑**：`seckill.exchange`(Direct, durable) / `seckill.order.queue`(durable)，Publisher Confirm + 手动 ACK；延迟交换机 `order.delay.exchange`(`x-delayed-message`) 做支付超时取消。
+- **Redis Key**（plan doc 为可读性省略前缀，**实现时统一加 `mall:` 前缀**，见 `MallConstants.REDIS_PREFIX`）：`seckill:stock:{activityId}:{seckillItemId}`、`seckill:item:{seckillItemId}`（商品项元数据缓存）、`seckill:user:{activityId}:{seckillItemId}:{userId}`、`seckill:order:{userId}:{activityId}:{seckillItemId}`（状态机 1PROCESSING/2SUCCESS/3FAILED，TTL 30min）、`seckill:activity:{activityId}`（活动结束时间戳缓存，入口校验免查库）、`seckill:inflight:{messageId}` + `seckill:inflight:index`（在途扣减标记/索引，崩溃补偿用）。
+- **Lua 原子扣减**：单 Key 扣库存 + 用户限购校验 + 写在途标记（KEYS: stock + user + inflight + inflight-index，ARGV: 限购 TTL / 数量 / 限购 / messageId）。
+- **MQ 拓扑**：`seckill.exchange`(Direct, durable) / `seckill.order.queue`(durable)，Publisher Confirm + 手动 ACK；延迟交换机 `seckill.delay.exchange`(`x-delayed-message`) 做支付超时取消。
+- **入口热路径（性能关键）**：`execute` 先做 Redis 原子预扣，**只有扣减成功的请求才落 `mq_message` + 发 MQ**；被拒请求（库存不足/限购）在 Redis 阶段直接返回、不写 MySQL。活动与商品元数据走 Redis 缓存；`mq_message` 直接落 `status=1`(待发送) 并预留 60s 发送宽限（原 0→1 两步合并为一步）。「已扣库存但未落库」的崩溃窗口由 `recoverOrphanInflightDeducts` 定时任务回收（回补 Redis 库存 + 限购）。
 - **Phase 1 服务边界**（plan 规定，2026-08-13 调整为集中式）：秒杀运行时**全部集中在 `mall-seckill-service`(8089)** —— 入口/预热/本地消息表(`mq_message`)/MQ 消费/订单创建/超时取消/库存回补；跨服务仅一处：order-service 取消秒杀订单(`order_source=2`)时 Feign 调 seckill-service `/internal/**` 回补。Phase 1 仅后端，前端秒杀页留到 Phase 2。
 - **验收指标（Phase 1）**：单机 500 QPS 无超卖/无丢消息/无重复订单，P99 < 800ms。
+- **性能配置**：`application.yml` 已配 HikariCP `maximum-pool-size: 50`（默认 10 是瓶颈）、RabbitMQ 监听 `prefetch: 50` + `concurrency: 5`(max 10)，避免 DB 连接池耗尽与单线程逐条消费成为吞吐瓶颈。
 
-> ✅ **架构张力已解决（2026-08-13）**：秒杀运行时就在网关路由的 `mall-seckill-service`(8089) 实现（原拆 marketing+order 的方案已废弃）。注意 `mall-seckill-service` 目前是空壳，开发前需补齐 dev profile + `mall-common-security`/`web`/`mybatis`/`redis`/`rabbitmq` 依赖；8089 与 TEI 容器端口冲突，调试秒杀时勿同时运行 shopkeeper-agent 的 TEI。
+> ✅ **架构张力已解决（2026-08-13）**：秒杀运行时就在网关路由的 `mall-seckill-service`(8089) 实现（原拆 marketing+order 的方案已废弃），现已完整落地（入口/预热/本地消息表/MQ 消费/订单创建/超时取消/库存回补/在途补偿）。8089 与 TEI 容器端口冲突，调试秒杀时勿同时运行 shopkeeper-agent 的 TEI。
 
 ## Authentication (`mall-auth-service`)
 

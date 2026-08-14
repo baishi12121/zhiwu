@@ -11,5 +11,6 @@ public interface SeckillApplicationService {
     public ExecuteResultDTO execute(Long userId, Long activityId, ExecuteReqDTO req);
     public SeckillResultDTO result(Long userId, Long activityId, Long seckillItemId);
     public String buildMessageId(Long userId, Long activityId, Long seckillItemId);
+    public void recoverOrphanInflightDeducts();
 
 }

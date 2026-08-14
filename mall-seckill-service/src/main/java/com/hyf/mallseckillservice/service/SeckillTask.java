@@ -8,5 +8,6 @@ public interface SeckillTask {
     public void warmUpActiveItems();
     public void retryPendingMessages();
     public void cancelExpiredOrders();
+    public void recoverOrphanInflightDeducts();
 
 }
