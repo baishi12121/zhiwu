@@ -1,0 +1,40 @@
+/* 前台类目 */
+.category {
+  margin: 20rpx 0 0;
+  padding: 10rpx 0;
+  display: flex;
+  flex-wrap: wrap;
+  min-height: 328rpx;
+
+  .category-item {
+    width: 150rpx;
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    box-sizing: border-box;
+    transition: transform 0.18s ease, opacity 0.18s ease;
+
+    .icon-box {
+      width: 100rpx;
+      height: 100rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .text {
+      font-size: 26rpx;
+      color: #666;
+    }
+  }
+
+  .category-item-hover {
+    opacity: 0.86;
+    transform: scale(1.04);
+
+    .text {
+      color: #333;
+    }
+  }
+}

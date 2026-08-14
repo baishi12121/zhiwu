@@ -1,0 +1,50 @@
+logging:
+  file:
+    enable: true
+    level: INFO
+    path: logs
+    rotation: "10 MB"
+    retention: "7 days"
+  console:
+    enable: true
+    level: INFO
+
+# 元数据库：存储问数智能体的元数据知识库（表/字段/指标信息）
+# 容器内默认通过 host.docker.internal 访问宿主机 MySQL
+db_meta:
+  host: ${oc.env:DB_META_HOST, host.docker.internal}
+  port: ${oc.env:DB_META_PORT, 3306}
+  user: ${oc.env:DB_META_USER, mall_meta}
+  password: ${oc.env:DB_META_PASSWORD, ""}
+  database: ${oc.env:DB_META_DATABASE, meta}
+
+# 业务数据库：对接 zhiwu-mall 的 mall 库（商品/订单/用户等真实业务数据）
+db_dw:
+  host: ${oc.env:DB_DW_HOST, host.docker.internal}
+  port: ${oc.env:DB_DW_PORT, 3306}
+  user: ${oc.env:DB_DW_USER, mall_readonly}
+  password: ${oc.env:DB_DW_PASSWORD, ""}
+  database: ${oc.env:DB_DW_DATABASE, mall}
+
+# Qdrant 向量库（容器内通过服务名访问）
+qdrant:
+  host: ${oc.env:QDRANT_HOST, qdrant}
+  port: ${oc.env:QDRANT_PORT, 6333}
+  embedding_size: 1024
+
+# Embedding 服务（容器内通过服务名访问，容器内端口是 80）
+embedding:
+  host: ${oc.env:EMBEDDING_HOST, embedding}
+  port: ${oc.env:EMBEDDING_PORT, 80}
+  model: BAAI/bge-large-zh-v1.5
+
+# Elasticsearch（容器内通过服务名访问）
+es:
+  host: ${oc.env:ES_HOST, elasticsearch}
+  port: ${oc.env:ES_PORT, 9200}
+  index_name: ${oc.env:ES_INDEX_NAME, mall_customer_service}
+
+llm:
+  model_name: ${oc.env:LLM_MODEL_NAME, qwen3.6-flash}
+  api_key: ${oc.env:LLM_API_KEY}
+  base_url: ${oc.env:LLM_BASE_URL, https://dashscope.aliyuncs.com/compatible-mode/v1}

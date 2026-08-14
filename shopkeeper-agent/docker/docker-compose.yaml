@@ -1,0 +1,77 @@
+# =====================================================================
+# shopkeeper-agent Python 服务
+# - 启动 FastAPI + LangGraph 应用以及 ES/Qdrant/Embedding 依赖容器
+# - MySQL 默认通过 host.docker.internal 访问宿主机
+# - 服务在宿主机 8090 端口提供接口
+# =====================================================================
+services:
+  elasticsearch:
+    build:
+      context: ./elasticsearch
+      dockerfile: Dockerfile
+    container_name: shopkeeper-elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: shopkeeper-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    container_name: shopkeeper-embedding
+    restart: unless-stopped
+    command:
+      - --model-id
+      - /data/bge-large-zh-v1.5
+      - --port
+      - "80"
+    ports:
+      - "18089:80"
+    volumes:
+      - ./embedding/bge-large-zh-v1.5:/data/bge-large-zh-v1.5:ro
+
+  shopkeeper-agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: shopkeeper-agent
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    env_file:
+      - ../.env
+    environment:
+      DB_META_HOST: host.docker.internal
+      DB_DW_HOST: host.docker.internal
+      QDRANT_HOST: qdrant
+      EMBEDDING_HOST: embedding
+      EMBEDDING_PORT: "80"
+      ES_HOST: elasticsearch
+      WAIT_FOR_EXTERNAL_SERVICES: "true"
+    depends_on:
+      - elasticsearch
+      - qdrant
+      - embedding
+    volumes:
+      - ../app:/app/app
+      - ../conf:/app/conf
+      - ../prompts:/app/prompts
+      - ../main.py:/app/main.py
+      - ../logs:/app/logs
+
+volumes:
+  es_data:
+  qdrant_data:

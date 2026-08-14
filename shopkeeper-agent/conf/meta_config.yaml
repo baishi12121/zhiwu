@@ -1,0 +1,458 @@
+# =====================================================================
+# zhiwu-mall 智能客服元数据配置
+# 覆盖商品、SKU、分类、品牌、优惠券、订单等客服高频查询表
+# sync=true 的字段会把真实取值同步到 ES，便于值域检索
+# =====================================================================
+tables:
+  # ============ 商品域 ============
+  - name: product
+    role: dim
+    description: 商品主表（SPU），包含商品名称、价格、库存、销量、评价数等核心信息。客服查询商品价格、库存、销量时使用。
+    columns:
+      - name: id
+        role: primary_key
+        description: 商品唯一标识（SPU ID）
+        alias: [商品ID, 产品ID, SPU ID]
+        sync: false
+
+      - name: name
+        role: dimension
+        description: 商品名称
+        alias: [商品名, 商品名称, 产品名, 产品名称]
+        sync: true
+
+      - name: subtitle
+        role: dimension
+        description: 商品卖点/副标题
+        alias: [卖点, 副标题, 描述]
+        sync: true
+
+      - name: price
+        role: measure
+        description: 商品当前售价（单位：元）
+        alias: [价格, 售价, 多少钱, 卖多少钱, 现价]
+        sync: false
+
+      - name: old_price
+        role: measure
+        description: 商品原价/划线价（单位：元）
+        alias: [原价, 划线价, 原来多少钱]
+        sync: false
+
+      - name: discount
+        role: measure
+        description: 折扣率，0.85 表示 8.5 折
+        alias: [折扣, 几折, 折扣率]
+        sync: false
+
+      - name: inventory
+        role: measure
+        description: 商品总库存（汇总所有 SKU）
+        alias: [库存, 总库存, 有没有货, 有货吗, 还有多少]
+        sync: false
+
+      - name: sales_count
+        role: measure
+        description: 商品销量
+        alias: [销量, 卖了多少, 销售量]
+        sync: false
+
+      - name: comment_count
+        role: measure
+        description: 评价数
+        alias: [评价数, 评论数, 多少评价]
+        sync: false
+
+      - name: collect_count
+        role: measure
+        description: 收藏数
+        alias: [收藏数, 多少收藏]
+        sync: false
+
+      - name: category_id
+        role: foreign_key
+        description: 关联分类表的外键
+        alias: [分类ID]
+        sync: false
+
+      - name: brand_id
+        role: foreign_key
+        description: 关联品牌表的外键
+        alias: [品牌ID]
+        sync: false
+
+      - name: status
+        role: dimension
+        description: 商品状态，0=下架 1=上架
+        alias: [状态, 是否上架, 上架状态]
+        sync: true
+
+  - name: product_sku
+    role: dim
+    description: 商品规格表（SKU），每个具体规格组合的价格和库存。用户询问某个颜色/尺寸的价格或库存时使用。
+    columns:
+      - name: id
+        role: primary_key
+        description: SKU 唯一标识
+        alias: [SKU ID, 规格ID]
+        sync: false
+
+      - name: product_id
+        role: foreign_key
+        description: 关联商品主表的外键
+        alias: [商品ID, 产品ID]
+        sync: false
+
+      - name: sku_code
+        role: dimension
+        description: SKU 编码
+        alias: [SKU编码, 规格编码]
+        sync: true
+
+      - name: price
+        role: measure
+        description: 该 SKU 规格的具体售价（单位：元）
+        alias: [规格价格, 这个规格多少钱, 这个颜色多少钱]
+        sync: false
+
+      - name: old_price
+        role: measure
+        description: 该 SKU 规格的原价（单位：元）
+        alias: [规格原价]
+        sync: false
+
+      - name: inventory
+        role: measure
+        description: 该 SKU 规格的库存
+        alias: [规格库存, 这个颜色有货吗, 这个尺寸有货吗]
+        sync: false
+
+      - name: status
+        role: dimension
+        description: SKU 状态，0=下架 1=上架
+        alias: [SKU状态]
+        sync: true
+
+  - name: spec
+    role: dim
+    description: 规格组表，定义商品的规格维度（如颜色、尺寸）
+    columns:
+      - name: id
+        role: primary_key
+        description: 规格组 ID
+        alias: [规格组ID]
+        sync: false
+
+      - name: product_id
+        role: foreign_key
+        description: 关联商品的外键
+        alias: [商品ID]
+        sync: false
+
+      - name: name
+        role: dimension
+        description: 规格组名称（如颜色、尺寸）
+        alias: [规格名, 规格, 有哪些规格]
+        sync: true
+
+  - name: spec_value
+    role: dim
+    description: 规格值表，定义每个规格组下的可选值（如瓷白色、S 码）
+    columns:
+      - name: id
+        role: primary_key
+        description: 规格值 ID
+        alias: [规格值ID]
+        sync: false
+
+      - name: spec_id
+        role: foreign_key
+        description: 关联规格组的外键
+        alias: [规格组ID]
+        sync: false
+
+      - name: name
+        role: dimension
+        description: 规格值名称（如瓷白色、S、M、L）
+        alias: [规格值, 颜色, 尺寸, 有哪些颜色, 有哪些尺寸]
+        sync: true
+
+  - name: sku_spec_value
+    role: dim
+    description: SKU 与规格值的关联表，决定每个 SKU 对应的具体规格组合
+    columns:
+      - name: sku_id
+        role: foreign_key
+        description: 关联 SKU 的外键
+        alias: [SKU ID]
+        sync: false
+
+      - name: spec_id
+        role: foreign_key
+        description: 关联规格组的外键
+        alias: [规格组ID]
+        sync: false
+
+      - name: spec_value_id
+        role: foreign_key
+        description: 关联规格值的外键
+        alias: [规格值ID]
+        sync: false
+
+  - name: category
+    role: dim
+    description: 商品分类表（树形结构，parent_id=0 为顶级分类）
+    columns:
+      - name: id
+        role: primary_key
+        description: 分类 ID
+        alias: [分类ID]
+        sync: false
+
+      - name: parent_id
+        role: foreign_key
+        description: 父分类 ID，0 为顶级
+        alias: [父分类ID]
+        sync: false
+
+      - name: name
+        role: dimension
+        description: 分类名称（如服饰、美妆、数码）
+        alias: [分类, 分类名, 类别, 品类]
+        sync: true
+
+  - name: brand
+    role: dim
+    description: 品牌表
+    columns:
+      - name: id
+        role: primary_key
+        description: 品牌 ID
+        alias: [品牌ID]
+        sync: false
+
+      - name: name
+        role: dimension
+        description: 品牌名称
+        alias: [品牌, 品牌名, 什么牌子]
+        sync: true
+
+  # ============ 营销域 ============
+  - name: coupon
+    role: dim
+    description: 优惠券模板表，包含满减门槛、优惠金额、折扣率等。客服查询优惠活动时使用。
+    columns:
+      - name: id
+        role: primary_key
+        description: 优惠券 ID
+        alias: [优惠券ID]
+        sync: false
+
+      - name: title
+        role: dimension
+        description: 优惠券名称
+        alias: [优惠券, 优惠券名称, 优惠活动]
+        sync: true
+
+      - name: coupon_type
+        role: dimension
+        description: 优惠券类型，1=满减 2=折扣
+        alias: [优惠券类型]
+        sync: true
+
+      - name: threshold_amount
+        role: measure
+        description: 满减门槛金额（单位：元），满此金额可用
+        alias: [满减门槛, 满多少可用, 满多少]
+        sync: false
+
+      - name: discount_amount
+        role: measure
+        description: 满减金额（单位：元）
+        alias: [减多少, 优惠金额, 满减金额]
+        sync: false
+
+      - name: discount_rate
+        role: measure
+        description: 折扣率，0.85 表示 8.5 折
+        alias: [折扣, 几折, 折扣率]
+        sync: false
+
+      - name: total_stock
+        role: measure
+        description: 优惠券总库存
+        alias: [总库存]
+        sync: false
+
+      - name: remain_stock
+        role: measure
+        description: 优惠券剩余库存
+        alias: [剩余, 还有多少, 剩余库存]
+        sync: false
+
+      - name: valid_start
+        role: dimension
+        description: 优惠券生效时间
+        alias: [生效时间, 开始时间]
+        sync: false
+
+      - name: valid_end
+        role: dimension
+        description: 优惠券失效时间
+        alias: [失效时间, 结束时间, 到期时间]
+        sync: false
+
+  # ============ 订单域 ============
+  - name: order
+    role: fact
+    description: 订单主表，记录订单金额、状态、支付方式等。客服查询订单状态、金额时使用。
+    columns:
+      - name: id
+        role: primary_key
+        description: 订单 ID
+        alias: [订单ID]
+        sync: false
+
+      - name: order_no
+        role: dimension
+        description: 业务订单号
+        alias: [订单号, 订单编号]
+        sync: true
+
+      - name: user_id
+        role: foreign_key
+        description: 关联用户的外键
+        alias: [用户ID]
+        sync: false
+
+      - name: order_state
+        role: dimension
+        description: 订单状态，1待付款 2待发货 3待收货 4待评价 5已完成 6已取消
+        alias: [订单状态, 状态]
+        sync: true
+
+      - name: total_money
+        role: measure
+        description: 订单金额合计（单位：元）
+        alias: [订单金额, 总金额, 合计]
+        sync: false
+
+      - name: pay_money
+        role: measure
+        description: 实付金额（单位：元）
+        alias: [实付金额, 实付, 付了多少钱]
+        sync: false
+
+      - name: post_fee
+        role: measure
+        description: 邮费（单位：元）
+        alias: [邮费, 运费]
+        sync: false
+
+      - name: discount_amount
+        role: measure
+        description: 优惠金额（单位：元）
+        alias: [优惠金额, 减免金额]
+        sync: false
+
+      - name: pay_channel
+        role: dimension
+        description: 支付渠道，1=支付宝 2=微信
+        alias: [支付渠道, 支付方式]
+        sync: true
+
+      - name: create_time
+        role: dimension
+        description: 订单创建时间
+        alias: [下单时间, 创建时间]
+        sync: false
+
+  - name: order_item
+    role: fact
+    description: 订单明细表，记录每个订单中的商品快照信息
+    columns:
+      - name: id
+        role: primary_key
+        description: 订单明细 ID
+        alias: [订单明细ID]
+        sync: false
+
+      - name: order_id
+        role: foreign_key
+        description: 关联订单的外键
+        alias: [订单ID]
+        sync: false
+
+      - name: sku_id
+        role: foreign_key
+        description: 关联 SKU 的外键
+        alias: [SKU ID]
+        sync: false
+
+      - name: spu_id
+        role: foreign_key
+        description: 关联商品的外键
+        alias: [商品ID, SPU ID]
+        sync: false
+
+      - name: name
+        role: dimension
+        description: 商品名称快照
+        alias: [商品名, 商品名称]
+        sync: true
+
+      - name: cur_price
+        role: measure
+        description: 实付单价（单位：元）
+        alias: [实付单价, 单价]
+        sync: false
+
+      - name: quantity
+        role: measure
+        description: 购买数量
+        alias: [数量, 购买数量, 买了多少]
+        sync: false
+
+      - name: subtotal
+        role: measure
+        description: 小计金额（单位：元）
+        alias: [小计, 小计金额]
+        sync: false
+
+# ============ 业务指标定义 ============
+metrics:
+  - name: 商品价格
+    description: 查询某个商品的当前售价，对应 product.price 字段
+    relevant_columns:
+      - product.price
+      - product.name
+    alias: [多少钱, 价格, 售价]
+
+  - name: 商品库存
+    description: >
+      商品当前可售卖剩余数量（实时库存）。
+      当用户问"还有货吗"、"有没有"、"剩余多少"、"缺货"、"补货"、"现货"时使用本指标。
+      常见同义词：库存量、库存数、可售数量、remain_stock、inventory。
+      严禁与"销量"混淆——销量是历史已售出数量，库存是当前剩余可售数量。
+    relevant_columns:
+      - product.inventory
+      - product.name
+    alias: [库存, 有货吗, 有没有货, 剩余, 现货, 补货, 缺货, 库存量]
+
+  - name: 商品销量
+    description: >
+      商品历史累计已售出数量（销售统计）。
+      当用户问"卖了多少"、"销量"、"卖得好不好"、"热销程度"、"什么卖得好"时使用本指标。
+      常见同义词：售出量、销售量、累计销售、sales_count、sold。
+      严禁与"库存"混淆——库存是当前剩余可售数量，销量是历史已售出总数。
+    relevant_columns:
+      - product.sales_count
+      - product.name
+    alias: [销量, 卖了多少, 售出, 销售量, 热销, 卖得好]
+
+  - name: 订单实付金额
+    description: 查询订单的实际支付金额，对应 order.pay_money 字段
+    relevant_columns:
+      - order.pay_money
+      - order.order_no
+    alias: [实付金额, 付了多少钱]
