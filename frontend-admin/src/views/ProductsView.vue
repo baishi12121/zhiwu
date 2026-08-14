@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import type { DataTableColumns, UploadCustomRequestOptions } from 'naive-ui'
-import { NButton, NPopconfirm, NSpace, useMessage } from 'naive-ui'
+import { NButton, NImage, NPopconfirm, NSpace, useMessage } from 'naive-ui'
 import { AddOutline, RefreshOutline, SearchOutline } from '@vicons/ionicons5'
 import StatusTag from '@/components/StatusTag.vue'
 import {
@@ -100,8 +100,30 @@ const statusOptions = [
 const money = (value?: number) =>
   new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(Number(value || 0))
 
+const productCoverUrl = (row: AdminProduct) => {
+  const images = row.images || []
+  const mainImage = images.find((image) => image.imageType === 1 && image.imageUrl)
+  return mainImage?.imageUrl || images.find((image) => image.imageUrl)?.imageUrl || ''
+}
+
 const columns: DataTableColumns<AdminProduct> = [
-  { title: 'ID', key: 'id', width: 80 },
+  {
+    title: '图片',
+    key: 'image',
+    width: 84,
+    render(row) {
+      const coverUrl = productCoverUrl(row)
+      return coverUrl
+        ? h(NImage, {
+            src: coverUrl,
+            width: 54,
+            height: 54,
+            objectFit: 'cover',
+            class: 'product-thumb',
+          })
+        : h('div', { class: 'product-thumb product-thumb--empty' }, '无图')
+    },
+  },
   {
     title: '商品',
     key: 'name',
@@ -488,6 +510,8 @@ onMounted(async () => {
                 <n-select v-model:value="image.imageType" :options="[{ label: '主图', value: 1 }, { label: '详情图', value: 2 }]" style="width: 120px" />
                 <n-input v-model:value="image.imageUrl" placeholder="图片 URL" />
                 <n-input-number v-model:value="image.sortOrder" placeholder="排序" style="width: 110px" />
+                <n-image v-if="image.imageUrl" :src="image.imageUrl" width="48" height="48" object-fit="cover" class="image-field-preview" />
+                <div v-else class="image-field-preview image-field-preview--empty">无图</div>
                 <n-button @click="productForm.images.splice(index, 1)">移除</n-button>
               </div>
               <n-upload
@@ -589,6 +613,29 @@ onMounted(async () => {
   font-size: 12px;
 }
 
+.product-thumb,
+.image-field-preview {
+  width: 54px;
+  height: 54px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: #eef3f2;
+}
+
+.image-field-preview {
+  width: 48px;
+  height: 48px;
+}
+
+.product-thumb--empty,
+.image-field-preview--empty {
+  display: grid;
+  place-items: center;
+  color: #8a949f;
+  font-size: 12px;
+}
+
 .pagination-bar {
   display: flex;
   justify-content: flex-end;
@@ -597,7 +644,7 @@ onMounted(async () => {
 
 .inline-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
+  grid-template-columns: 120px minmax(0, 1fr) 110px 48px auto;
   gap: 8px;
   align-items: center;
 }

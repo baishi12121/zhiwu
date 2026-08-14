@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hyf.mallseckillservice.mapper.SeckillStockCompensateMapper">
+
+    <insert id="insertIgnore">
+        INSERT IGNORE INTO seckill_stock_compensate (
+            message_id,
+            activity_id,
+            seckill_item_id,
+            user_id,
+            quantity,
+            compensate_type,
+            status
+        ) VALUES (
+            #{messageId},
+            #{activityId},
+            #{seckillItemId},
+            #{userId},
+            #{quantity},
+            #{compensateType},
+            #{status}
+        )
+    </insert>
+
+    <update id="markDone">
+        UPDATE seckill_stock_compensate
+        SET status = 1
+        WHERE message_id = #{messageId}
+          AND compensate_type = #{compensateType}
+    </update>
+
+    <update id="markFailed">
+        UPDATE seckill_stock_compensate
+        SET status = 2
+        WHERE message_id = #{messageId}
+          AND compensate_type = #{compensateType}
+    </update>
+
+    <select id="countCancellationDone" resultType="int">
+        SELECT COUNT(1)
+        FROM seckill_stock_compensate
+        WHERE message_id = #{messageId}
+          AND compensate_type IN (2, 3)
+          AND status = 1
+    </select>
+</mapper>

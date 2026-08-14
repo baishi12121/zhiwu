@@ -7,6 +7,7 @@ import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.context.annotation.Bean;
@@ -28,7 +29,10 @@ public class SeckillMqConfig {
 
     @Bean
     public Queue seckillOrderQueue() {
-        return new Queue(SeckillConstants.SECKILL_QUEUE, true);
+        return QueueBuilder.durable(SeckillConstants.SECKILL_QUEUE)
+                .deadLetterExchange(SeckillConstants.SECKILL_DLX_EXCHANGE)
+                .deadLetterRoutingKey(SeckillConstants.SECKILL_ORDER_DLQ_ROUTING)
+                .build();
     }
 
     @Bean
@@ -36,6 +40,35 @@ public class SeckillMqConfig {
         return BindingBuilder.bind(seckillOrderQueue)
                 .to(seckillExchange)
                 .with(SeckillConstants.SECKILL_ROUTING);
+    }
+
+    @Bean
+    public DirectExchange seckillDlxExchange() {
+        return new DirectExchange(SeckillConstants.SECKILL_DLX_EXCHANGE, true, false);
+    }
+
+    @Bean
+    public Queue seckillOrderDlq() {
+        return QueueBuilder.durable(SeckillConstants.SECKILL_ORDER_DLQ).build();
+    }
+
+    @Bean
+    public Binding seckillOrderDlqBinding(DirectExchange seckillDlxExchange, Queue seckillOrderDlq) {
+        return BindingBuilder.bind(seckillOrderDlq)
+                .to(seckillDlxExchange)
+                .with(SeckillConstants.SECKILL_ORDER_DLQ_ROUTING);
+    }
+
+    @Bean
+    public Queue seckillTimeoutDlq() {
+        return QueueBuilder.durable(SeckillConstants.SECKILL_TIMEOUT_DLQ).build();
+    }
+
+    @Bean
+    public Binding seckillTimeoutDlqBinding(DirectExchange seckillDlxExchange, Queue seckillTimeoutDlq) {
+        return BindingBuilder.bind(seckillTimeoutDlq)
+                .to(seckillDlxExchange)
+                .with(SeckillConstants.SECKILL_TIMEOUT_DLQ_ROUTING);
     }
 
     @Bean

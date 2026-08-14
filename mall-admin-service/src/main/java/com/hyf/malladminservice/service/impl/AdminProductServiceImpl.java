@@ -38,6 +38,8 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 商品管理业务逻辑。
@@ -78,7 +80,9 @@ public class AdminProductServiceImpl implements AdminProductService {
 
         IPage<AdminProduct> page = new Page<>(query.getPage(), query.getPageSize());
         IPage<AdminProduct> result = productMapper.selectPage(page, wrapper);
-        return PageResult.of(result.getRecords(), result.getTotal(), query.getPage(), query.getPageSize());
+        List<AdminProduct> records = result.getRecords();
+        attachImages(records);
+        return PageResult.of(records, result.getTotal(), query.getPage(), query.getPageSize());
     }
 
     /**
@@ -145,32 +149,9 @@ public class AdminProductServiceImpl implements AdminProductService {
             }
         }
         // 4. 写图片
-        if (!CollectionUtils.isEmpty(req.getImages())) {
-            for (ProductSaveRequest.AdminProductImage imgReq : req.getImages()) {
-                AdminProductImage image = new AdminProductImage();
-                BeanUtils.copyProperties(imgReq, image);
-                image.setProductId(product.getId());
-                if (image.getImageType() == null) {
-                    image.setImageType(1);
-                }
-                if (image.getSortOrder() == null) {
-                    image.setSortOrder(0);
-                }
-                imageMapper.insert(image);
-            }
-        }
+        insertImages(product.getId(), req.getImages());
         // 5. 写属性
-        if (!CollectionUtils.isEmpty(req.getProperties())) {
-            for (ProductSaveRequest.AdminProductProperty propReq : req.getProperties()) {
-                AdminProductProperty prop = new AdminProductProperty();
-                BeanUtils.copyProperties(propReq, prop);
-                prop.setProductId(product.getId());
-                if (prop.getSortOrder() == null) {
-                    prop.setSortOrder(0);
-                }
-                propertyMapper.insert(prop);
-            }
-        }
+        insertProperties(product.getId(), req.getProperties());
         // 6. 回填总库存
         if (totalInventory > 0) {
             product.setInventory(totalInventory);
@@ -192,6 +173,12 @@ public class AdminProductServiceImpl implements AdminProductService {
         validateCategory(req.getCategoryId());
         BeanUtils.copyProperties(req, exist, "skus", "images", "properties", "salesCount", "commentCount", "collectCount");
         productMapper.updateById(exist);
+        if (req.getImages() != null) {
+            replaceImages(id, req.getImages());
+        }
+        if (req.getProperties() != null) {
+            replaceProperties(id, req.getProperties());
+        }
         log.info("[admin-product] 修改商品成功: id={}", id);
     }
 
@@ -366,10 +353,67 @@ public class AdminProductServiceImpl implements AdminProductService {
                 .orderByAsc(AdminProductImage::getSortOrder));
     }
 
+    private void replaceImages(Long productId, List<ProductSaveRequest.AdminProductImage> images) {
+        imageMapper.delete(new LambdaQueryWrapper<AdminProductImage>().eq(AdminProductImage::getProductId, productId));
+        insertImages(productId, images);
+    }
+
+    private void insertImages(Long productId, List<ProductSaveRequest.AdminProductImage> images) {
+        if (CollectionUtils.isEmpty(images)) {
+            return;
+        }
+        for (ProductSaveRequest.AdminProductImage imgReq : images) {
+            AdminProductImage image = new AdminProductImage();
+            BeanUtils.copyProperties(imgReq, image);
+            image.setProductId(productId);
+            if (image.getImageType() == null) {
+                image.setImageType(1);
+            }
+            if (image.getSortOrder() == null) {
+                image.setSortOrder(0);
+            }
+            imageMapper.insert(image);
+        }
+    }
+
+    private void attachImages(List<AdminProduct> products) {
+        if (CollectionUtils.isEmpty(products)) {
+            return;
+        }
+        List<Long> productIds = products.stream().map(AdminProduct::getId).toList();
+        List<AdminProductImage> images = imageMapper.selectList(new LambdaQueryWrapper<AdminProductImage>()
+                .in(AdminProductImage::getProductId, productIds)
+                .orderByAsc(AdminProductImage::getImageType)
+                .orderByAsc(AdminProductImage::getSortOrder));
+        Map<Long, List<AdminProductImage>> imagesByProductId = images.stream()
+                .collect(Collectors.groupingBy(AdminProductImage::getProductId));
+        products.forEach(product -> product.setImages(imagesByProductId.getOrDefault(product.getId(), List.of())));
+    }
+
     private List<AdminProductProperty> listProperties(Long productId) {
         return propertyMapper.selectList(new LambdaQueryWrapper<AdminProductProperty>()
                 .eq(AdminProductProperty::getProductId, productId)
                 .orderByAsc(AdminProductProperty::getSortOrder));
+    }
+
+    private void replaceProperties(Long productId, List<ProductSaveRequest.AdminProductProperty> properties) {
+        propertyMapper.delete(new LambdaQueryWrapper<AdminProductProperty>().eq(AdminProductProperty::getProductId, productId));
+        insertProperties(productId, properties);
+    }
+
+    private void insertProperties(Long productId, List<ProductSaveRequest.AdminProductProperty> properties) {
+        if (CollectionUtils.isEmpty(properties)) {
+            return;
+        }
+        for (ProductSaveRequest.AdminProductProperty propReq : properties) {
+            AdminProductProperty prop = new AdminProductProperty();
+            BeanUtils.copyProperties(propReq, prop);
+            prop.setProductId(productId);
+            if (prop.getSortOrder() == null) {
+                prop.setSortOrder(0);
+            }
+            propertyMapper.insert(prop);
+        }
     }
 
     private void validateCategory(Long categoryId) {

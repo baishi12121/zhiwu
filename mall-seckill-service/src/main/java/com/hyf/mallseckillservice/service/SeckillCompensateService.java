@@ -4,8 +4,10 @@ import com.hyf.mallseckillservice.dto.StockCompensateDTO;
 
 public interface SeckillCompensateService {
 
-    public void cancelAndRestore(Long orderId);
-    public void restoreForCancel(String orderNo);
-    public void restoreForCancel(String orderNo, StockCompensateDTO dto);
+    void cancelAndRestore(Long orderId);
+    void restoreForCancel(String orderNo);
+    void restoreForCancel(String orderNo, StockCompensateDTO dto);
+    void restoreForCreateFailure(String messageId, Long activityId, Long seckillItemId, Long userId, int quantity);
+    void recordReconcileDiff(String messageId, Long activityId, Long seckillItemId, Long userId, int quantity);
 
 }

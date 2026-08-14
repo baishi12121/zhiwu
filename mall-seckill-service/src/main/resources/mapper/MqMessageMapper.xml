@@ -34,4 +34,27 @@
         ORDER BY id ASC
         LIMIT #{limit}
     </select>
+
+    <select id="countPendingSendDue" resultType="int">
+        SELECT COUNT(1)
+        FROM mq_message
+        WHERE status = 1
+          AND (next_retry_time IS NULL OR next_retry_time &lt;= NOW())
+    </select>
+
+    <select id="selectSentWithoutOrder" resultType="com.hyf.mallseckillservice.entity.MqMessageDO">
+        SELECT m.*
+        FROM mq_message m
+        WHERE m.status IN (2, 4)
+          AND NOT EXISTS (
+              SELECT 1
+              FROM `order` o
+              WHERE o.order_source = 2
+                AND o.user_id = m.user_id
+                AND o.activity_id = m.activity_id
+                AND o.seckill_item_id = m.seckill_item_id
+          )
+        ORDER BY m.id ASC
+        LIMIT #{limit}
+    </select>
 </mapper>

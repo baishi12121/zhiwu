@@ -28,3 +28,9 @@ mall:
       # 必须与 spring.mvc.async.request-timeout 对齐（300s）
       # 若 WebClient 先于 MVC 超时，整个 SSE 流会被 onError 中断
       timeout-ms: 300000
+
+python:
+  service:
+    base-url: http://localhost:8090
+    connect-timeout: 3000
+    read-timeout: 60000

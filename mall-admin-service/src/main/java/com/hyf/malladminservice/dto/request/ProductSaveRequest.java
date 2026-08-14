@@ -12,8 +12,8 @@ import java.util.List;
 /**
  * 商品保存请求（新建 / 修改共用）。
  *
- * <p>新建时携带的 SKU / 图片 / 属性集合会一并写入；修改时仅更新主表字段，
- * 子集合的增删改通过各自的独立接口维护（避免整体覆盖丢数据）。
+ * <p>新建时携带的 SKU / 图片 / 属性集合会一并写入；修改时更新主表字段，并整体替换图片 / 属性集合。
+ * SKU 的增删改通过独立接口维护。
  *
  * @author hyf
  */
@@ -53,10 +53,10 @@ public class ProductSaveRequest {
     /** 新建商品时一并写入的 SKU 列表（修改时忽略） */
     private List<AdminProductSku> skus;
 
-    /** 新建商品时一并写入的主图 / 详情图（修改时忽略） */
+    /** 新建 / 修改商品时维护的主图 / 详情图 */
     private List<AdminProductImage> images;
 
-    /** 新建商品时一并写入的详情属性（修改时忽略） */
+    /** 新建 / 修改商品时维护的详情属性 */
     private List<AdminProductProperty> properties;
 
     /** 嵌套 SKU 简化结构，便于前端表单提交 */

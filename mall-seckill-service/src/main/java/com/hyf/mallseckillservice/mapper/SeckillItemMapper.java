@@ -17,6 +17,8 @@ public interface SeckillItemMapper extends BaseMapper<SeckillItemDO> {
 
     List<SeckillItemDO> selectEnabledByActivityId(@Param("activityId") Long activityId);
 
+    List<SeckillItemDO> selectEnabledItemsForReconcile(@Param("limit") int limit);
+
     /**
      * 数据库最终库存扣减，SQL 内带库存充足条件，作为 Redis 预占后的最终防线。
      */

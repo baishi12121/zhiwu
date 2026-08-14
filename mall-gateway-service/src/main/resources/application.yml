@@ -55,7 +55,7 @@ spring:
         - id: mall-ai-service
           uri: lb://mall-ai-service
           predicates:
-            - Path=/ai/**
+            - Path=/ai/**,/api/agent/**
         # ============ 内部 Feign 调用不暴露网关 ============
         - id: internal-block
           uri: no://op

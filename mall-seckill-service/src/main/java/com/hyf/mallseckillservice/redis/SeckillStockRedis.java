@@ -82,6 +82,22 @@ public class SeckillStockRedis {
         stringRedisTemplate.opsForValue().increment(SeckillConstants.stockKey(activityId, seckillItemId), quantity);
     }
 
+    public Integer getStock(Long activityId, Long seckillItemId) {
+        String value = stringRedisTemplate.opsForValue().get(SeckillConstants.stockKey(activityId, seckillItemId));
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    public void calibrateStock(Long activityId, Long seckillItemId, int stock) {
+        stringRedisTemplate.opsForValue().set(SeckillConstants.stockKey(activityId, seckillItemId), String.valueOf(stock));
+    }
+
     /**
      * 回滚用户限购计数。仅在本请求 Lua 已 INCRBY 过限购 key 后调用，此时 key 必然存在。
      */

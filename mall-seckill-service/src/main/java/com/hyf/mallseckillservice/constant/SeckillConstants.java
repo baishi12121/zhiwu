@@ -28,10 +28,17 @@ public final class SeckillConstants {
     public static final String SECKILL_EXCHANGE = "seckill.exchange";
     public static final String SECKILL_QUEUE = "seckill.order.queue";
     public static final String SECKILL_ROUTING = "seckill.order";
+    public static final String SECKILL_DLX_EXCHANGE = "seckill.dlx";
+    public static final String SECKILL_ORDER_DLQ = "seckill.order.dlq";
+    public static final String SECKILL_ORDER_DLQ_ROUTING = "seckill.order.dlq";
+    public static final String SECKILL_TIMEOUT_DLQ = "seckill.timeout.dlq";
+    public static final String SECKILL_TIMEOUT_DLQ_ROUTING = "seckill.timeout.dlq";
+    public static final String SECKILL_ORDER_LISTENER_ID = "seckillOrderConsumer";
     /** 延迟取消队列：订单未支付到期后触发库存回补。 */
     public static final String SECKILL_DELAY_EXCHANGE = "seckill.delay.exchange";
     public static final String SECKILL_DELAY_QUEUE = "seckill.delay.queue";
     public static final String SECKILL_DELAY_ROUTING = "seckill.delay.routing";
+    public static final int[] CONSUMER_RETRY_BACKOFF_MILLIS = {1_000, 5_000, 30_000};
 
     /** mq_message 状态机：0待扣减、1待发送、2已发送、3失败、4完成。 */
     public static final int MSG_PENDING_DEDUCT = 0;
@@ -55,6 +62,21 @@ public final class SeckillConstants {
     public static final int IDEMPOTENT_FAILED = 3;
     public static final int SECKILL_ORDER_TTL_SEC = 30 * 60;
     public static final int SECKILL_RESTORE_TTL_SEC = 7 * 24 * 60 * 60;
+
+    public static final int COMPENSATE_TYPE_ORDER_CREATE_FAILED = 1;
+    public static final int COMPENSATE_TYPE_PAY_TIMEOUT = 2;
+    public static final int COMPENSATE_TYPE_USER_CANCEL = 3;
+    public static final int COMPENSATE_TYPE_RECONCILE_DIFF = 4;
+    public static final int COMPENSATE_STATUS_PENDING = 0;
+    public static final int COMPENSATE_STATUS_DONE = 1;
+    public static final int COMPENSATE_STATUS_FAILED = 2;
+
+    public static final String TASK_LOCK_REFRESH_META = "seckill:task:refresh-meta";
+    public static final String TASK_LOCK_RETRY_PENDING = "seckill:task:retry-pending";
+    public static final String TASK_LOCK_CANCEL_EXPIRED = "seckill:task:cancel-expired";
+    public static final String TASK_LOCK_RECOVER_INFLIGHT = "seckill:task:recover-inflight";
+    public static final String TASK_LOCK_RECONCILE_MINUTE = "seckill:task:reconcile-minute";
+    public static final String TASK_LOCK_RECONCILE_HOUR = "seckill:task:reconcile-hour";
 
     /** Lua 扣减库存脚本返回码。 */
     public static final long REDIS_OK = 1L;

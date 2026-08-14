@@ -11,6 +11,14 @@
         ORDER BY sort_order ASC, id ASC
     </select>
 
+    <select id="selectEnabledItemsForReconcile" resultType="com.hyf.mallseckillservice.entity.SeckillItemDO">
+        SELECT *
+        FROM seckill_item
+        WHERE status = 1
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+
     <update id="deductStock">
         UPDATE seckill_item
         SET seckill_stock = seckill_stock - #{quantity}

@@ -1,16 +1,22 @@
 package com.hyf.mallaiservice.controller;
 
+import com.hyf.mallaiservice.dto.AgentChatRequest;
+import com.hyf.mallaiservice.service.AgentChatService;
 import com.hyf.mallaiservice.dto.ChatRequest;
 import com.hyf.mallaiservice.service.AiAgentService;
 import com.hyf.mallcommon.core.result.Result;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.slf4j.MDC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.publisher.Flux;
 
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * AI 域 Controller
@@ -25,11 +31,14 @@ import java.util.Map;
 public class AiController {
 
     private static final Logger log = LoggerFactory.getLogger(AiController.class);
+    private static final String TRACE_ID_HEADER = "X-Trace-Id";
 
     private final AiAgentService aiAgentService;
+    private final AgentChatService agentChatService;
 
-    public AiController(AiAgentService aiAgentService) {
+    public AiController(AiAgentService aiAgentService, AgentChatService agentChatService) {
         this.aiAgentService = aiAgentService;
+        this.agentChatService = agentChatService;
     }
 
     /**
@@ -71,5 +80,45 @@ public class AiController {
         String lastResult = aiAgentService.chat(query)
                 .blockLast();
         return Result.success(lastResult);
+    }
+
+    /**
+     * 兼容旧网关 /ai/** 路由的新版 SSE 入口。
+     *
+     * 新规范入口是 /api/agent/chat/stream；该接口只做路径兼容，
+     * 内部仍复用 Controller -> Service -> PythonClient 新链路。
+     */
+    @GetMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter chatStream(@RequestParam(required = false) String question,
+                                 @RequestParam(required = false) String query,
+                                 @RequestParam(required = false) String conversationId,
+                                 @RequestParam(required = false) String userId,
+                                 @RequestParam(required = false) String knowledgeBaseId,
+                                 HttpServletRequest servletRequest) {
+        String text = question != null && !question.isBlank() ? question : query;
+        String resolvedUserId = userId != null && !userId.isBlank()
+                ? userId
+                : servletRequest.getHeader("X-User-Id");
+        AgentChatRequest request = new AgentChatRequest();
+        request.setQuestion(text);
+        request.setConversationId(conversationId);
+        request.setUserId(resolvedUserId);
+        request.setKnowledgeBaseId(knowledgeBaseId);
+
+        String traceId = resolveTraceId(servletRequest);
+        MDC.put("trace_id", traceId);
+        try {
+            return agentChatService.streamChat(request, traceId);
+        } finally {
+            MDC.remove("trace_id");
+        }
+    }
+
+    private static String resolveTraceId(HttpServletRequest request) {
+        String traceId = request.getHeader(TRACE_ID_HEADER);
+        if (traceId == null || traceId.isBlank()) {
+            traceId = UUID.randomUUID().toString();
+        }
+        return traceId;
     }
 }

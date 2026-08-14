@@ -1,24 +1,71 @@
-version: "3.8"
-
 services:
-  nacos:
-    image: nacos/nacos-server:v2.3.2
-    container_name: nacos
-    environment:
-      - MODE=standalone
-      - PREFER_HOST_MODE=hostname
-    ports:
-      - "8848:8848"
-      - "9848:9848"   # gRPC 客户端通信端口 (Nacos 2.x 必须)
-      - "9849:9849"   # gRPC 服务端通信端口
+  elasticsearch:
+    build:
+      context: ./shopkeeper-agent/docker/elasticsearch
+      dockerfile: Dockerfile
+    container_name: shopkeeper-elasticsearch
     restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - shopkeeper_es_data:/usr/share/elasticsearch/data
 
-  sentinel:
-    image: bladex/sentinel-dashboard:1.8.6
-    container_name: sentinel-dashboard
-    environment:
-      - SERVER_PORT=8858
-    ports:
-      - "8858:8858"
-#      - "8719:8719"
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: shopkeeper-qdrant
     restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - shopkeeper_qdrant_data:/qdrant/storage
+
+  embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    container_name: shopkeeper-embedding
+    restart: unless-stopped
+    command:
+      - --model-id
+      - /data/bge-large-zh-v1.5
+      - --port
+      - "80"
+    ports:
+      - "18089:80"
+    volumes:
+      - ./shopkeeper-agent/docker/embedding/bge-large-zh-v1.5:/data/bge-large-zh-v1.5:ro
+
+  shopkeeper-agent:
+    build:
+      context: ./shopkeeper-agent
+      dockerfile: docker/Dockerfile
+    container_name: shopkeeper-agent
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    env_file:
+      - ./shopkeeper-agent/.env
+    environment:
+      DB_META_HOST: host.docker.internal
+      DB_DW_HOST: host.docker.internal
+      QDRANT_HOST: qdrant
+      EMBEDDING_HOST: embedding
+      EMBEDDING_PORT: "80"
+      ES_HOST: elasticsearch
+      WAIT_FOR_EXTERNAL_SERVICES: "true"
+    depends_on:
+      - elasticsearch
+      - qdrant
+      - embedding
+    volumes:
+      - ./shopkeeper-agent/app:/app/app
+      - ./shopkeeper-agent/conf:/app/conf
+      - ./shopkeeper-agent/prompts:/app/prompts
+      - ./shopkeeper-agent/main.py:/app/main.py
+      - ./shopkeeper-agent/logs:/app/logs
+
+volumes:
+  shopkeeper_es_data:
+  shopkeeper_qdrant_data:

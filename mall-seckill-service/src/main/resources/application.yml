@@ -59,3 +59,13 @@ mall:
     enabled: true
     exclude-paths:
       - /internal/**
+
+seckill:
+  rabbitmq:
+    management-url: ${RABBITMQ_MANAGEMENT_URL:http://localhost:15672}
+    management-username: ${RABBITMQ_MANAGEMENT_USERNAME:admin}
+    management-password: ${RABBITMQ_MANAGEMENT_PASSWORD:123456}
+  consumer:
+    scale:
+      up-backlog: ${SECKILL_SCALE_UP_BACKLOG:500}
+      down-backlog: ${SECKILL_SCALE_DOWN_BACKLOG:50}

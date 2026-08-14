@@ -61,6 +61,8 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             "/ai/chat",
             "/ai/chat/**",
             "/ai/health",
+            "/api/agent/chat",
+            "/api/agent/chat/**",
             "/error"
     );
 

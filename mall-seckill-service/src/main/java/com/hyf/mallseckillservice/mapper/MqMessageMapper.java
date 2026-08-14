@@ -37,4 +37,8 @@ public interface MqMessageMapper extends BaseMapper<MqMessageDO> {
      * 扫描已到重试时间的待发送消息，交给定时任务重新投递 MQ。
      */
     List<MqMessageDO> selectPendingSendForRetry(@Param("limit") int limit);
+
+    int countPendingSendDue();
+
+    List<MqMessageDO> selectSentWithoutOrder(@Param("limit") int limit);
 }

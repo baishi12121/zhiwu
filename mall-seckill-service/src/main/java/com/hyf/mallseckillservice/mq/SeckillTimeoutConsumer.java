@@ -22,16 +22,17 @@ import java.io.IOException;
 public class SeckillTimeoutConsumer {
 
     private final SeckillCompensateService seckillCompensateService;
+    private final SeckillConsumerRetryExecutor retryExecutor;
 
     @RabbitListener(queues = SeckillConstants.SECKILL_DELAY_QUEUE)
     public void handle(String orderId, Channel channel, Message message) throws IOException {
         long deliveryTag = message.getMessageProperties().getDeliveryTag();
         try {
             // 回补服务内部会校验订单来源和状态，重复超时消息不会重复回补库存。
-            seckillCompensateService.cancelAndRestore(Long.parseLong(orderId));
+            retryExecutor.execute("timeout:" + orderId, () -> seckillCompensateService.cancelAndRestore(Long.parseLong(orderId)));
             channel.basicAck(deliveryTag, false);
         } catch (Exception e) {
-            log.error("[seckill-timeout] cancel failed, orderId={}", orderId, e);
+            log.error("[seckill-timeout] cancel failed after retry, orderId={}", orderId, e);
             channel.basicNack(deliveryTag, false, false);
         }
     }
