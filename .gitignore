@@ -31,3 +31,10 @@ application-dev.yml
 
 ### Uploaded local files (local OSS fallback, now superseded by real OSS) ###
 uploads/
+
+### Python ###
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
