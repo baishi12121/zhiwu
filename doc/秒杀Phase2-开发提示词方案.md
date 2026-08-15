@@ -39,7 +39,7 @@ doc/基于Redis和MQ实现秒杀订单加购.md（终态参考）。
 - SeckillStockRedis：Redis Lua 原子扣减（含在途标记）+ 回补 + 活动/元数据缓存。
 - MqMessageServiceImpl：本地消息表写入/状态流转/Publisher Confirm/retryExpired（生产端发送重投）。
 - SeckillOrderServiceImpl.createSeckillOrder：@Transactional 建单（order+order_item+扣 seckill_stock+回写 mq_message=4）。
-- SeckillCompensateServiceImpl：cancelAndRestore（超时取消）+ restoreForCancel（用户取消），restoreStockOnce 用 Redis restoreKey SETNX 幂等。
+- SeckillCompensateServiceImpl：cancelAndRestore（超时取消）+ restoreForCancel（用户取消），写 seckill_stock_compensate 流水（DB 唯一键 uk_message_id 幂等）并回补 Redis/DB。
 - SeckillTaskImpl：@Scheduled 预热/发送重投/超时扫描/在途回收（当前单实例，无分布式锁）。
 - SeckillOrderConsumer / SeckillTimeoutConsumer：MQ 消费。
 - SeckillDelayConfig：seckill.delay.exchange(x-delayed-message)/queue 已声明。
@@ -92,13 +92,13 @@ SeckillOrderConsumer（下单失败回补的调用点）。
 
 要做：
 1. 建表（新建 sql/_apply_seckill_phase2.sql，勿改 init.sql）：
-   按 plan 4.4.3 的 DDL 建 seckill_stock_compensate（含 uk_message_id_type(message_id, compensate_type) 唯一键、
+   按 plan 4.4.3 的 DDL 建 seckill_stock_compensate（含 uk_message_id(message_id) 唯一键、
    compensate_type 1下单失败/2支付超时/3用户取消/4对账偏差、status 0待处理/1已完成/2失败）。
 2. 新增 SeckillStockCompensateDO（entity，extends BaseEntity）+ SeckillStockCompensateMapper（+ XML）。
 3. 重构 SeckillCompensateServiceImpl：把现有 cancelAndRestore / restoreForCancel / restoreStockOnce 的回补动作，
-   统一走一个「写补偿流水（INSERT ... 用 uk_message_id_type 去重，冲突即视为已补偿，直接返回）→ 回补 Redis + DB」的公共方法。
+   统一走一个「写补偿流水（INSERT ... 用 uk_message_id 去重，冲突即视为已补偿，直接返回）→ 回补 Redis + DB」的公共方法。
    覆盖类型：下单失败(1)、支付超时(2)、用户取消(3)。对账偏差(4)留到 P2-3 调用。
-4. 幂等原则：以流水表唯一键为「是否已补偿」的最终依据（现有 restoreKey 的 Redis SETNX 可保留作快速去重，但 DB 唯一键是兜底）。
+4. 幂等原则：以流水表唯一键（uk_message_id，单列）为「是否已补偿」的唯一事实源；不再使用 Redis restoreKey 占位（其 SETNX 在回补前占位会在失败/崩溃时卡死重试）。
 5. 消费者 SeckillOrderConsumer 下单失败时回补，也要走这个流水（compensate_type=1）。
 
 约束：不改库存扣减主链路；回补必须 Redis + DB 双写保持一致（现有 restoreStockOnce 的 afterCommit 模式保留）。
@@ -312,12 +312,12 @@ SeckillTimeoutConsumer.handle：成功 cancelAndRestore+ack；异常 basicNack(r
 SeckillCompensateServiceImpl 当前：
 - cancelAndRestore(orderId)：超时取消，校验 order_source=2 && order_state=1 → cancelPendingOrder → restoreStockOnce。
 - restoreForCancel(orderNo[, dto])：用户取消，校验归属 → cancelPendingOrder → restoreStockOnce。
-- restoreStockOnce(order)：用 redis.setIfAbsent(restoreKey(orderNo), "1", 7天) 做幂等；冲突则 return。
+- restoreStockOnce(order)：Phase 1 用 redis.setIfAbsent(restoreKey(orderNo), "1", 7天) 做幂等；P2-2 起改为写 seckill_stock_compensate 流水（DB 唯一键）做幂等，restoreKey 已移除。
   然后 orderItemMapper.selectFirstByOrderId → seckillItemMapper.restoreStock(DB) →
   afterCommit 里 seckillStockRedis.restoreStock(Redis)。
 
-P2-2 要做：把「Redis SETNX 幂等」升级为「写 seckill_stock_compensate 流水（uk_message_id_type 唯一键）→ 回补 Redis+DB」。
-restoreKey 的 Redis SETNX 可保留作快速去重，但 DB 唯一键是最终幂等依据。
+P2-2 要做：把「Redis SETNX 幂等」升级为「写 seckill_stock_compensate 流水（uk_message_id 唯一键）→ 回补 Redis+DB」。
+restoreKey 的 Redis SETNX 已移除，DB 唯一键（uk_message_id）是唯一幂等依据。
 
 注意点：
 1. 下单失败（消费者 catch 里的 restoreStock）也要走流水，compensate_type=1。

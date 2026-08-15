@@ -248,7 +248,7 @@ public void markSending(String messageId) {
 
 **现象/危害**
 
-`@Transactional` 只覆盖 DB `restoreStock`，Redis `increment` 在事务提交前执行。Redis 写成功而事务回滚时库存多回补；Redis 写失败而 DB 提交时库存少回补（泄漏）。`restoreKey` 的 `setIfAbsent` 只防同单重复，不防跨系统偏差。
+`@Transactional` 只覆盖 DB `restoreStock`，Redis `increment` 在事务提交前执行。Redis 写成功而事务回滚时库存多回补；Redis 写失败而 DB 提交时库存少回补（泄漏）。`restoreKey` 的 `setIfAbsent` 只防同单重复，不防跨系统偏差。（后续已落地：Redis 回补移到事务提交后 afterCommit，且幂等从 Redis `restoreKey` 迁到 DB 唯一键 `uk_message_id`，见「秒杀方案分阶段实施计划」4.4.3。）
 
 **根因**：`SeckillCompensateService.java:68-83`，`restoreStockOnce` 内 DB/Redis 混合。
 

@@ -867,7 +867,7 @@ CREATE TABLE `mq_message` (
   KEY `idx_status_next_time` (`status`, `next_retry_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='MQ 本地消息表（秒杀下单可靠投递凭证）';
 
--- 秒杀库存补偿流水（Phase 2：下单失败/支付超时/用户取消/对账偏差触发回补，uk_message_id_type 防重复回补）
+-- 秒杀库存补偿流水（Phase 2：下单失败/支付超时/用户取消/对账偏差触发回补，uk_message_id 防重复回补）
 DROP TABLE IF EXISTS `seckill_stock_compensate`;
 CREATE TABLE `seckill_stock_compensate` (
   `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -881,7 +881,7 @@ CREATE TABLE `seckill_stock_compensate` (
   `create_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_message_id_type` (`message_id`, `compensate_type`),
+  UNIQUE KEY `uk_message_id` (`message_id`),
   KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='秒杀库存补偿流水';
 

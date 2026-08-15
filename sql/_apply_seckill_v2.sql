@@ -166,6 +166,6 @@ CREATE TABLE IF NOT EXISTS `seckill_stock_compensate` (
   `create_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_message_id_type` (`message_id`, `compensate_type`),
+  UNIQUE KEY `uk_message_id` (`message_id`),
   KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='秒杀库存补偿流水';

@@ -16,7 +16,6 @@ public final class SeckillConstants {
     public static final String ITEM_KEY = MallConstants.REDIS_PREFIX + "seckill:item:%d";
     public static final String USER_KEY = MallConstants.REDIS_PREFIX + "seckill:user:%d:%d:%d";
     public static final String ORDER_KEY = MallConstants.REDIS_PREFIX + "seckill:order:%d:%d:%d";
-    public static final String RESTORE_KEY = MallConstants.REDIS_PREFIX + "seckill:restore:%s";
     /** 活动结束时间缓存 key：预热时写入活动结束时间戳(epoch ms)，入口校验活动启停不再每请求查库。 */
     public static final String ACTIVITY_KEY = MallConstants.REDIS_PREFIX + "seckill:activity:%d";
     /** 在途扣减标记 key（单条）：Redis 已扣库存但 mq_message 尚未落库时存在，值为 "quantity:epochSeconds"。 */
@@ -61,7 +60,6 @@ public final class SeckillConstants {
     public static final int IDEMPOTENT_SUCCESS = 2;
     public static final int IDEMPOTENT_FAILED = 3;
     public static final int SECKILL_ORDER_TTL_SEC = 30 * 60;
-    public static final int SECKILL_RESTORE_TTL_SEC = 7 * 24 * 60 * 60;
 
     public static final int COMPENSATE_TYPE_ORDER_CREATE_FAILED = 1;
     public static final int COMPENSATE_TYPE_PAY_TIMEOUT = 2;
@@ -98,10 +96,6 @@ public final class SeckillConstants {
 
     public static String orderKey(Long userId, Long activityId, Long seckillItemId) {
         return ORDER_KEY.formatted(userId, activityId, seckillItemId);
-    }
-
-    public static String restoreKey(String orderNo) {
-        return RESTORE_KEY.formatted(orderNo);
     }
 
     public static String activityKey(Long activityId) {

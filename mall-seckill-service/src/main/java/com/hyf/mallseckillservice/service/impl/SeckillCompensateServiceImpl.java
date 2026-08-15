@@ -15,19 +15,17 @@ import com.hyf.mallseckillservice.redis.SeckillStockRedis;
 import com.hyf.mallseckillservice.service.SeckillCompensateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
  * 秒杀库存补偿服务。
  *
- * <p>所有库存回补先写补偿流水，再执行库存修复；Redis SETNX 保留为快速去重，DB 流水用于最终留痕。</p>
+ * <p>所有库存回补先写补偿流水（DB 唯一键 uk_message_id 幂等），再执行库存修复；Redis/DB 双写保持一致。</p>
  */
 @Slf4j
 @Service
@@ -42,7 +40,6 @@ public class SeckillCompensateServiceImpl implements SeckillCompensateService {
     private final SeckillItemMapper seckillItemMapper;
     private final SeckillStockCompensateMapper compensateMapper;
     private final SeckillStockRedis seckillStockRedis;
-    private final StringRedisTemplate stringRedisTemplate;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -127,21 +124,16 @@ public class SeckillCompensateServiceImpl implements SeckillCompensateService {
             log.info("[seckill-compensate] cancellation stock already restored, orderNo={}", order.getOrderNo());
             return;
         }
-        Boolean first = stringRedisTemplate.opsForValue().setIfAbsent(
-                SeckillConstants.restoreKey(order.getOrderNo()),
-                "1",
-                Duration.ofSeconds(SeckillConstants.SECKILL_RESTORE_TTL_SEC));
-        if (!Boolean.TRUE.equals(first)) {
-            log.info("[seckill-compensate] stock already restored by redis key, orderNo={}", order.getOrderNo());
-            return;
-        }
-
         OrderItemDO item = orderItemMapper.selectFirstByOrderId(order.getId());
         int quantity = item == null || item.getQuantity() == null ? 1 : item.getQuantity();
+        // DB 唯一键(uk_message_id)是「是否已补偿」的唯一事实源：插入成功即抢到补偿权，冲突即视为已处理。
+        // 由于取消类流水 message_id 统一为 orderNo，天然覆盖「支付超时(2)+用户取消(3)并发双触发」的跨类型去重，
+        // 且与 DB 回补同事务，不存在 Redis 占位与 DB 回补之间的原子性缺口。
         if (!insertCompensate(messageId, order.getActivityId(), order.getSeckillItemId(), order.getUserId(), quantity, compensateType)) {
+            log.info("[seckill-compensate] compensate record exists, skip restore, orderNo={}", order.getOrderNo());
             return;
         }
-        // DB 回补在事务内执行，失败则整笔（含补偿流水）随事务回滚，不会留下脏流水。
+        // DB 回补在事务内执行，失败则整笔（含补偿流水）随事务回滚，重试可重新 insert 进入。
         seckillItemMapper.restoreStock(order.getSeckillItemId(), quantity);
         restoreRedisAndMark(messageId, compensateType, order.getActivityId(), order.getSeckillItemId(), quantity);
     }

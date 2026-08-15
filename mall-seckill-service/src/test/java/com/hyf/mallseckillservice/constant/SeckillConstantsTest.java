@@ -12,7 +12,6 @@ class SeckillConstantsTest {
         assertThat(SeckillConstants.itemKey(2L)).isEqualTo("mall:seckill:item:2");
         assertThat(SeckillConstants.userKey(1L, 2L, 3L)).isEqualTo("mall:seckill:user:1:2:3");
         assertThat(SeckillConstants.orderKey(3L, 1L, 2L)).isEqualTo("mall:seckill:order:3:1:2");
-        assertThat(SeckillConstants.restoreKey("SECKILL1")).isEqualTo("mall:seckill:restore:SECKILL1");
     }
 
     @Test
