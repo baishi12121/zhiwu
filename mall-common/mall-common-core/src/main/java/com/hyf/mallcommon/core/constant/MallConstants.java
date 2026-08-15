@@ -77,4 +77,14 @@ public final class MallConstants {
     public static final String MQ_ORDER_DELAY_ROUTING_KEY = "order.delay.routing.key";
     /** 延迟消息头名（值为延迟毫秒数） */
     public static final String MQ_X_DELAY_HEADER = "x-delay";
+
+    // ---------- RabbitMQ product search index sync ----------
+
+    public static final String MQ_PRODUCT_INDEX_EXCHANGE = "product.index.exchange";
+    public static final String MQ_PRODUCT_INDEX_QUEUE = "product.index.queue";
+    public static final String MQ_PRODUCT_INDEX_DLQ = "product.index.dlq";
+    public static final String MQ_PRODUCT_INDEX_DLX = "product.index.dlx";
+    public static final String MQ_PRODUCT_INDEX_UPSERT_ROUTING_KEY = "product.index.upsert";
+    public static final String MQ_PRODUCT_INDEX_DELETE_ROUTING_KEY = "product.index.delete";
+    public static final String MQ_PRODUCT_INDEX_DLQ_ROUTING_KEY = "product.index.dlq";
 }

@@ -24,6 +24,7 @@ import com.hyf.malladminservice.mapper.AdminProductImageMapper;
 import com.hyf.malladminservice.mapper.AdminProductMapper;
 import com.hyf.malladminservice.mapper.AdminProductPropertyMapper;
 import com.hyf.malladminservice.mapper.AdminProductSkuMapper;
+import com.hyf.malladminservice.mq.ProductIndexEventPublisher;
 import com.hyf.mallcommon.core.exception.BizException;
 import com.hyf.mallcommon.core.page.PageQuery;
 import com.hyf.mallcommon.core.page.PageResult;
@@ -59,6 +60,7 @@ public class AdminProductServiceImpl implements AdminProductService {
     private final AdminProductImageMapper imageMapper;
     private final AdminProductPropertyMapper propertyMapper;
     private final AdminCategoryMapper categoryMapper;
+    private final ProductIndexEventPublisher productIndexEventPublisher;
 
     // ==================== 商品 SPU ====================
 
@@ -158,6 +160,7 @@ public class AdminProductServiceImpl implements AdminProductService {
             productMapper.updateById(product);
         }
         log.info("[admin-product] 新建商品成功: id={}, name={}", product.getId(), product.getName());
+        productIndexEventPublisher.publishUpsert(product.getId());
         return product.getId();
     }
 
@@ -180,6 +183,7 @@ public class AdminProductServiceImpl implements AdminProductService {
             replaceProperties(id, req.getProperties());
         }
         log.info("[admin-product] 修改商品成功: id={}", id);
+        productIndexEventPublisher.publishUpsert(id);
     }
 
     /**
@@ -193,6 +197,11 @@ public class AdminProductServiceImpl implements AdminProductService {
         }
         exist.setStatus(status);
         productMapper.updateById(exist);
+        if (status != null && status == 1) {
+            productIndexEventPublisher.publishUpsert(id);
+        } else {
+            productIndexEventPublisher.publishDelete(id);
+        }
         log.info("[admin-product] 上下架: id={}, status={}", id, status);
     }
 
@@ -213,6 +222,7 @@ public class AdminProductServiceImpl implements AdminProductService {
         skuMapper.delete(new LambdaQueryWrapper<AdminProductSku>().eq(AdminProductSku::getProductId, id));
         imageMapper.delete(new LambdaQueryWrapper<AdminProductImage>().eq(AdminProductImage::getProductId, id));
         propertyMapper.delete(new LambdaQueryWrapper<AdminProductProperty>().eq(AdminProductProperty::getProductId, id));
+        productIndexEventPublisher.publishDelete(id);
         log.info("[admin-product] 删除商品: id={}", id);
     }
 
@@ -228,6 +238,7 @@ public class AdminProductServiceImpl implements AdminProductService {
         int target = calcTarget(exist.getInventory(), req);
         exist.setInventory(target);
         productMapper.updateById(exist);
+        productIndexEventPublisher.publishUpsert(id);
         log.info("[admin-product] 调整 SPU 库存: id={}, before={}, after={}", id, exist.getInventory(), target);
     }
 
@@ -262,6 +273,7 @@ public class AdminProductServiceImpl implements AdminProductService {
         }
         skuMapper.insert(sku);
         refreshProductInventory(productId);
+        productIndexEventPublisher.publishUpsert(productId);
         log.info("[admin-product] 新增 SKU: id={}, productId={}", sku.getId(), productId);
         return sku.getId();
     }
@@ -278,6 +290,7 @@ public class AdminProductServiceImpl implements AdminProductService {
         BeanUtils.copyProperties(req, exist, "productId");
         skuMapper.updateById(exist);
         refreshProductInventory(exist.getProductId());
+        productIndexEventPublisher.publishUpsert(exist.getProductId());
         log.info("[admin-product] 修改 SKU: id={}", skuId);
     }
 
@@ -292,6 +305,7 @@ public class AdminProductServiceImpl implements AdminProductService {
         }
         skuMapper.deleteById(skuId);
         refreshProductInventory(exist.getProductId());
+        productIndexEventPublisher.publishUpsert(exist.getProductId());
         log.info("[admin-product] 删除 SKU: id={}, productId={}", skuId, exist.getProductId());
     }
 
@@ -306,6 +320,7 @@ public class AdminProductServiceImpl implements AdminProductService {
         }
         exist.setStatus(status);
         skuMapper.updateById(exist);
+        productIndexEventPublisher.publishUpsert(exist.getProductId());
     }
 
     /**
@@ -321,6 +336,7 @@ public class AdminProductServiceImpl implements AdminProductService {
         exist.setInventory(target);
         skuMapper.updateById(exist);
         refreshProductInventory(exist.getProductId());
+        productIndexEventPublisher.publishUpsert(exist.getProductId());
         log.info("[admin-product] 调整 SKU 库存: id={}, after={}", skuId, target);
     }
 
@@ -340,8 +356,14 @@ public class AdminProductServiceImpl implements AdminProductService {
         if (exist == null) {
             throw new BizException(ResultCode.NOT_FOUND, "分类不存在");
         }
+        List<Long> productIds = productMapper.selectList(new LambdaQueryWrapper<AdminProduct>()
+                        .eq(AdminProduct::getCategoryId, id))
+                .stream()
+                .map(AdminProduct::getId)
+                .toList();
         BeanUtils.copyProperties(req, exist, "id");
         categoryMapper.updateById(exist);
+        productIds.forEach(productIndexEventPublisher::publishUpsert);
     }
 
     // ==================== 内部工具 ====================

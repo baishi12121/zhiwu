@@ -20,7 +20,15 @@
         </dependency>
         <dependency>
             <groupId>com.hyf</groupId>
+            <artifactId>mall-common-mybatis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hyf</groupId>
             <artifactId>mall-common-feign</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hyf</groupId>
+            <artifactId>mall-common-rabbitmq</artifactId>
         </dependency>
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
@@ -35,7 +43,16 @@
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
         </dependency>
+
+        <!-- Elasticsearch 客户端（Spring Data Elasticsearch 5.5 → elasticsearch-java 8.18.8）-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+        </dependency>
     </dependencies>
+
+
+
 
     <build>
         <plugins>

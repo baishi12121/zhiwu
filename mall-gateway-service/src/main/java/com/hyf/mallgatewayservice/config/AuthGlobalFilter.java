@@ -54,6 +54,10 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             "/avatar/**",
             "/user/avatar/upload",
             "/pay/wx/notify",
+            // 全局搜索公开接口(关键词搜索/自动补全),允许匿名访问(电商标准)
+            // 注意:不放 /search/**,避免误放 /search/internal/** 全量重建等管理接口
+            "/search/all",
+            "/search/tips",
             // 管理后台登录入口（其他 /admin/** 仍需 token）
             "/admin/login",
             "/admin/health",
