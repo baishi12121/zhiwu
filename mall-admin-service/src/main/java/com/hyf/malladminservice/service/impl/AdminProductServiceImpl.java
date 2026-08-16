@@ -356,14 +356,69 @@ public class AdminProductServiceImpl implements AdminProductService {
         if (exist == null) {
             throw new BizException(ResultCode.NOT_FOUND, "分类不存在");
         }
+        if (req.getParentId() != null && req.getParentId() != 0L) {
+            if (req.getParentId().equals(id)) {
+                throw new BizException(ResultCode.BAD_REQUEST, "父分类不能是自己");
+            }
+            if (categoryMapper.selectById(req.getParentId()) == null) {
+                throw new BizException(ResultCode.BAD_REQUEST, "父分类不存在");
+            }
+        }
         List<Long> productIds = productMapper.selectList(new LambdaQueryWrapper<AdminProduct>()
                         .eq(AdminProduct::getCategoryId, id))
                 .stream()
                 .map(AdminProduct::getId)
                 .toList();
         BeanUtils.copyProperties(req, exist, "id");
+        if (req.getParentId() == null || req.getParentId() == 0L) {
+            exist.setParentId(0L);
+        }
         categoryMapper.updateById(exist);
         productIds.forEach(productIndexEventPublisher::publishUpsert);
+    }
+
+    @Transactional
+    public Long createCategory(CategorySaveRequest req) {
+        if (!StringUtils.hasText(req.getName())) {
+            throw new BizException(ResultCode.BAD_REQUEST, "分类名称不能为空");
+        }
+        if (req.getParentId() != null && req.getParentId() != 0L) {
+            if (categoryMapper.selectById(req.getParentId()) == null) {
+                throw new BizException(ResultCode.BAD_REQUEST, "父分类不存在");
+            }
+        }
+        AdminCategory category = new AdminCategory();
+        BeanUtils.copyProperties(req, category);
+        if (category.getParentId() == null) {
+            category.setParentId(0L);
+        }
+        if (category.getSortOrder() == null) {
+            category.setSortOrder(0);
+        }
+        if (category.getStatus() == null) {
+            category.setStatus(1);
+        }
+        categoryMapper.insert(category);
+        return category.getId();
+    }
+
+    @Transactional
+    public void deleteCategory(Long id) {
+        AdminCategory exist = categoryMapper.selectById(id);
+        if (exist == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "分类不存在");
+        }
+        Long childCount = categoryMapper.selectCount(new LambdaQueryWrapper<AdminCategory>()
+                .eq(AdminCategory::getParentId, id));
+        if (childCount > 0) {
+            throw new BizException(ResultCode.BAD_REQUEST, "该分类下存在子分类，无法删除");
+        }
+        Long productCount = productMapper.selectCount(new LambdaQueryWrapper<AdminProduct>()
+                .eq(AdminProduct::getCategoryId, id));
+        if (productCount > 0) {
+            throw new BizException(ResultCode.BAD_REQUEST, "该分类下存在商品，无法删除");
+        }
+        categoryMapper.deleteById(id);
     }
 
     // ==================== 内部工具 ====================

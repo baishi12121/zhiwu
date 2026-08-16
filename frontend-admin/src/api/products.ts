@@ -1,6 +1,5 @@
 import { http, normalizePage } from './http'
 import type {
-  AdminCategory,
   AdminProduct,
   AdminProductSku,
   EntityId,
@@ -54,11 +53,6 @@ export const adjustSkuStock = (skuId: EntityId, payload: StockAdjustRequest) =>
   http.put<void, void>(`/admin/skus/${skuId}/stock`, payload)
 
 export const deleteSku = (skuId: EntityId) => http.delete<void, void>(`/admin/skus/${skuId}`)
-
-export const listCategories = () => http.get<AdminCategory[], AdminCategory[]>('/admin/categories')
-
-export const updateCategory = (id: EntityId, payload: Partial<AdminCategory>) =>
-  http.put<void, void>(`/admin/categories/${id}`, payload)
 
 export interface UploadResponse {
   url: string

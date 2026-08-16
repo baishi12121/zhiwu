@@ -158,9 +158,23 @@ public class AdminProductController {
         return Result.success(adminProductService.listAllCategories());
     }
 
+    /** 新增分类 */
+    @PostMapping("/categories")
+    public Result<Long> createCategory(@RequestBody CategorySaveRequest req) {
+        return Result.success(adminProductService.createCategory(req));
+    }
+
+    /** 更新分类 */
     @PutMapping("/categories/{id}")
     public Result<Void> updateCategory(@PathVariable Long id, @RequestBody CategorySaveRequest req) {
         adminProductService.updateCategory(id, req);
+        return Result.success();
+    }
+
+    /** 删除分类 */
+    @DeleteMapping("/categories/{id}")
+    public Result<Void> deleteCategory(@PathVariable Long id) {
+        adminProductService.deleteCategory(id);
         return Result.success();
     }
 }

@@ -705,6 +705,98 @@ INSERT INTO `sku_spec_value` (`sku_id`, `spec_id`, `spec_value_id`, `sort_order`
   (12, 5, 11, 1),
   (13, 5, 12, 1);
 
+-- =====================================================================
+-- 补充：为「只有 SPU、没有 SKU」的商品补齐 规格/规格值/SKU/SKU规格关联/图片
+-- 原因：原种子只为演示多规格与秒杀给 1/2/4/9 写了 SKU，其余商品仅插了 SPU 行，
+--       点进详情时 sku_list 为空 → 前端误判「库存为 0」显示「该商品已抢完」。
+-- 涉及：3 牛仔裤、5 运动短裤、6 防晒衣、7 智能手表、8 收纳箱、10 白T恤。
+-- 图片为占位外部 URL（沿用原模板 itheima 域名），可自行替换为真实商品图。
+-- =====================================================================
+
+-- 规格组（spec，续用 id 6~14）
+INSERT INTO `spec` (`id`, `product_id`, `name`, `sort_order`) VALUES
+  (6, 3, '颜色', 1),  (7, 3, '尺码', 2),
+  (8, 5, '颜色', 1),  (9, 5, '尺码', 2),
+  (10, 6, '颜色', 1), (11, 6, '尺码', 2),
+  (12, 7, '颜色', 1),
+  (13, 8, '容量', 1),
+  (14, 10, '尺码', 1);
+
+-- 规格值（spec_value，续用 id 13~34）
+INSERT INTO `spec_value` (`id`, `spec_id`, `name`, `picture`, `sort_order`) VALUES
+  (13, 6, '浅蓝', NULL, 1), (14, 6, '深蓝', NULL, 2),
+  (15, 7, '26', NULL, 1), (16, 7, '28', NULL, 2), (17, 7, '30', NULL, 3),
+  (18, 8, '黑色', NULL, 1), (19, 8, '藏青', NULL, 2),
+  (20, 9, 'M', NULL, 1), (21, 9, 'L', NULL, 2), (22, 9, 'XL', NULL, 3),
+  (23, 10, '白色', NULL, 1), (24, 10, '浅灰', NULL, 2),
+  (25, 11, 'M', NULL, 1), (26, 11, 'L', NULL, 2), (27, 11, 'XL', NULL, 3),
+  (28, 12, '曜石黑', NULL, 1), (29, 12, '月光银', NULL, 2),
+  (30, 13, '70L', NULL, 1), (31, 13, '100L', NULL, 2),
+  (32, 14, 'M', NULL, 1), (33, 14, 'L', NULL, 2), (34, 14, 'XL', NULL, 3);
+
+-- SKU（product_sku，续用 id 14~38）
+INSERT INTO `product_sku` (`id`, `product_id`, `sku_code`, `price`, `old_price`, `inventory`, `picture`, `status`) VALUES
+  (14, 3, 'JEANS-003-LB-26', 169.00, 269.00, 45, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/d8e1bf09f42e472bb96d5e8214419006.png', 1),
+  (15, 3, 'JEANS-003-LB-28', 169.00, 269.00, 60, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/d8e1bf09f42e472bb96d5e8214419006.png', 1),
+  (16, 3, 'JEANS-003-LB-30', 169.00, 269.00, 55, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/d8e1bf09f42e472bb96d5e8214419006.png', 1),
+  (17, 3, 'JEANS-003-DB-26', 169.00, 269.00, 40, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/d8e1bf09f42e472bb96d5e8214419006.png', 1),
+  (18, 3, 'JEANS-003-DB-28', 169.00, 269.00, 55, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/d8e1bf09f42e472bb96d5e8214419006.png', 1),
+  (19, 3, 'JEANS-003-DB-30', 169.00, 269.00, 45, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/d8e1bf09f42e472bb96d5e8214419006.png', 1),
+  (20, 5, 'SHORT-005-BK-M', 89.00, 139.00, 70, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/b90c9fff978348eba09d05f281a25e0d.png', 1),
+  (21, 5, 'SHORT-005-BK-L', 89.00, 139.00, 70, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/b90c9fff978348eba09d05f281a25e0d.png', 1),
+  (22, 5, 'SHORT-005-BK-XL', 89.00, 139.00, 65, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/b90c9fff978348eba09d05f281a25e0d.png', 1),
+  (23, 5, 'SHORT-005-NY-M', 89.00, 139.00, 65, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/b90c9fff978348eba09d05f281a25e0d.png', 1),
+  (24, 5, 'SHORT-005-NY-L', 89.00, 139.00, 65, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/b90c9fff978348eba09d05f281a25e0d.png', 1),
+  (25, 5, 'SHORT-005-NY-XL', 89.00, 139.00, 65, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/b90c9fff978348eba09d05f281a25e0d.png', 1),
+  (26, 6, 'COAT-006-WH-M', 129.00, 199.00, 45, NULL, 1),
+  (27, 6, 'COAT-006-WH-L', 129.00, 199.00, 45, NULL, 1),
+  (28, 6, 'COAT-006-WH-XL', 129.00, 199.00, 40, NULL, 1),
+  (29, 6, 'COAT-006-GY-M', 129.00, 199.00, 40, NULL, 1),
+  (30, 6, 'COAT-006-GY-L', 129.00, 199.00, 40, NULL, 1),
+  (31, 6, 'COAT-006-GY-XL', 129.00, 199.00, 40, NULL, 1),
+  (32, 7, 'WATCH-007-BK', 599.00, 999.00, 40, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/a7efa2ecb417496d932317a3d4a1665b.png', 1),
+  (33, 7, 'WATCH-007-SL', 599.00, 999.00, 40, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/a7efa2ecb417496d932317a3d4a1665b.png', 1),
+  (34, 8, 'BOX-008-70L', 59.00, 99.00, 300, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260815/04c068e691c6494fb40cd3553e2e27c6.png', 1),
+  (35, 8, 'BOX-008-100L', 59.00, 99.00, 300, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260815/04c068e691c6494fb40cd3553e2e27c6.png', 1),
+  (36, 10, 'TEE-010-W-M', 69.00, 99.00, 170, NULL, 1),
+  (37, 10, 'TEE-010-W-L', 69.00, 99.00, 170, NULL, 1),
+  (38, 10, 'TEE-010-W-XL', 69.00, 99.00, 160, NULL, 1);
+
+-- SKU ↔ 规格值（sku_spec_value，sort_order 与 spec.sort_order 对齐）
+INSERT INTO `sku_spec_value` (`sku_id`, `spec_id`, `spec_value_id`, `sort_order`) VALUES
+  (14, 6, 13, 1), (14, 7, 15, 2),
+  (15, 6, 13, 1), (15, 7, 16, 2),
+  (16, 6, 13, 1), (16, 7, 17, 2),
+  (17, 6, 14, 1), (17, 7, 15, 2),
+  (18, 6, 14, 1), (18, 7, 16, 2),
+  (19, 6, 14, 1), (19, 7, 17, 2),
+  (20, 8, 18, 1), (20, 9, 20, 2),
+  (21, 8, 18, 1), (21, 9, 21, 2),
+  (22, 8, 18, 1), (22, 9, 22, 2),
+  (23, 8, 19, 1), (23, 9, 20, 2),
+  (24, 8, 19, 1), (24, 9, 21, 2),
+  (25, 8, 19, 1), (25, 9, 22, 2),
+  (26, 10, 23, 1), (26, 11, 25, 2),
+  (27, 10, 23, 1), (27, 11, 26, 2),
+  (28, 10, 23, 1), (28, 11, 27, 2),
+  (29, 10, 24, 1), (29, 11, 25, 2),
+  (30, 10, 24, 1), (30, 11, 26, 2),
+  (31, 10, 24, 1), (31, 11, 27, 2),
+  (32, 12, 28, 1),
+  (33, 12, 29, 1),
+  (34, 13, 30, 1),
+  (35, 13, 31, 1),
+  (36, 14, 32, 1),
+  (37, 14, 33, 1),
+  (38, 14, 34, 1);
+
+-- 商品主图（product_image，补 3/5/7/8；6/10 暂无图不插）
+INSERT INTO `product_image` (`product_id`, `image_type`, `image_url`, `sort_order`) VALUES
+  (3, 1, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/d8e1bf09f42e472bb96d5e8214419006.png', 1),
+  (5, 1, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/b90c9fff978348eba09d05f281a25e0d.png', 1),
+  (7, 1, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260814/a7efa2ecb417496d932317a3d4a1665b.png', 1),
+  (8, 1, 'https://skyhyf.oss-cn-beijing.aliyuncs.com/20260815/04c068e691c6494fb40cd3553e2e27c6.png', 1);
+
 -- 收货地址
 INSERT INTO `user_address` (`id`, `user_id`, `receiver`, `contact`, `province_code`, `city_code`, `county_code`, `full_location`, `address`, `postal_code`, `address_tags`, `is_default`) VALUES
   (1, 2, '张三', '13800000002', '44', '4403', '440305', '广东省 深圳市 南山区', '科技园路 1 号腾讯大厦 5F', '518057', '公司', 1),

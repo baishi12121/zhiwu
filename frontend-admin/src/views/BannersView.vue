@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { h, onMounted, reactive, ref } from 'vue'
-import type { DataTableColumns, UploadCustomRequestOptions } from 'naive-ui'
-import { NButton, NPopconfirm, NSpace, useMessage } from 'naive-ui'
-import { AddOutline, RefreshOutline } from '@vicons/ionicons5'
+import type { DataTableColumns, DropdownOption, UploadCustomRequestOptions } from 'naive-ui'
+import { NButton, NDropdown, NIcon, NImage, useDialog, useMessage } from 'naive-ui'
+import {
+  AddOutline,
+  ArrowDownOutline,
+  ImagesOutline,
+  PricetagsOutline,
+  TrashOutline,
+} from '@vicons/ionicons5'
 import StatusTag from '@/components/StatusTag.vue'
 import {
   createBanner,
@@ -16,6 +22,7 @@ import { uploadFile } from '@/api/products'
 import type { AdminBanner, EntityId } from '@/types/admin'
 
 const message = useMessage()
+const dialog = useDialog()
 const loading = ref(false)
 const rows = ref<AdminBanner[]>([])
 const total = ref(0)
@@ -57,65 +64,91 @@ const statusOptions = [
 ]
 const siteText = (value?: number) => siteOptions.find((item) => item.value === value)?.label || '-'
 
-const thumbStyle = {
-  width: '104px',
-  height: '54px',
-  maxWidth: '104px',
-  maxHeight: '54px',
-  display: 'block',
-  objectFit: 'cover',
-  borderRadius: '6px',
-  background: '#eef3f2',
-}
-
 const columns: DataTableColumns<AdminBanner> = [
-  { title: 'ID', key: 'id', width: 80 },
   {
     title: '图片',
     key: 'imgUrl',
-    width: 130,
+    width: 120,
     render(row) {
-      return h('div', { class: 'banner-thumb-wrap' }, [
-        row.imgUrl ? h('img', { style: thumbStyle, src: row.imgUrl, alt: row.title }) : h('span', '无图'),
+      return row.imgUrl
+        ? h(NImage, {
+            src: row.imgUrl,
+            width: 96,
+            height: 54,
+            objectFit: 'cover',
+            class: 'banner-thumb',
+            previewDisabled: true,
+          })
+        : h('div', { class: 'banner-thumb banner-thumb--empty' }, [
+            h(NIcon, { size: 20, color: '#98A2B3' }, { default: () => h(ImagesOutline) }),
+          ])
+    },
+  },
+  {
+    title: 'Banner',
+    key: 'title',
+    minWidth: 200,
+    render(row) {
+      return h('div', { class: 'banner-meta' }, [
+        h('strong', { class: 'banner-title' }, row.title),
+        h('span', { class: 'banner-href' }, row.hrefUrl ? '已设置跳转' : '未设置跳转'),
       ])
     },
   },
   {
-    title: '标题',
-    key: 'title',
-    minWidth: 180,
-    render(row) {
-      return h('div', { class: 'title-cell' }, [
-        h('strong', row.title),
-        h('span', row.hrefUrl || '未设置跳转'),
-      ])
-    },
+    title: '位置',
+    key: 'distributionSite',
+    width: 110,
+    render: (row) => h('span', { class: 'cell-text' }, siteText(row.distributionSite)),
   },
-  { title: '位置', key: 'distributionSite', render: (row) => siteText(row.distributionSite) },
-  { title: '排序', key: 'sortOrder', width: 90 },
+  { title: '排序', key: 'sortOrder', width: 90, render: (row) => h('span', { class: 'cell-text' }, String(row.sortOrder ?? 0)) },
   {
     title: '状态',
     key: 'status',
+    width: 110,
     render: (row) => h(StatusTag, { value: row.status, activeText: '启用', inactiveText: '禁用' }),
   },
   {
     title: '操作',
     key: 'actions',
-    width: 250,
+    width: 180,
+    fixed: 'right',
     render(row) {
-      return h(NSpace, { size: 8 }, () => [
-        h(NButton, { size: 'small', onClick: () => openDrawer(row.id) }, { default: () => '编辑' }),
+      const dropdownOptions: DropdownOption[] = [
+        {
+          label: row.status === 1 ? '禁用 Banner' : '启用 Banner',
+          key: 'toggle-status',
+          icon: () => h(NIcon, null, { default: () => h(PricetagsOutline) }),
+        },
+        { type: 'divider', key: 'd1' },
+        {
+          label: '删除 Banner',
+          key: 'delete',
+          icon: () => h(NIcon, { color: '#D03050' }, { default: () => h(TrashOutline) }),
+        },
+      ]
+      return h('div', { class: 'row-actions' }, [
+        h(NButton, { size: 'small', type: 'primary', onClick: () => openDrawer(row.id) }, { default: () => '编辑' }),
         h(
-          NButton,
-          { size: 'small', type: row.status === 1 ? 'warning' : 'success', onClick: () => toggleStatus(row) },
-          { default: () => (row.status === 1 ? '禁用' : '启用') },
-        ),
-        h(
-          NPopconfirm,
-          { onPositiveClick: () => remove(row.id) },
+          NDropdown,
           {
-            trigger: () => h(NButton, { size: 'small', type: 'error' }, { default: () => '删除' }),
-            default: () => `确认删除 Banner「${row.title}」？`,
+            trigger: 'click',
+            options: dropdownOptions,
+            onSelect: (key: string) => {
+              if (key === 'toggle-status') toggleStatus(row)
+              if (key === 'delete') confirmDeleteBanner(row)
+            },
+          },
+          {
+            default: () =>
+              h(
+                NButton,
+                { size: 'small', quaternary: true },
+                {
+                  default: () => '更多',
+                  icon: () => h(NIcon, null, { default: () => h(ArrowDownOutline) }),
+                },
+              ),
           },
         ),
       ])
@@ -150,11 +183,23 @@ const load = async () => {
   }
 }
 
+const resetFilters = () => {
+  query.distributionSite = null
+  query.status = null
+  query.page = 1
+  load()
+}
+
 const openDrawer = async (id?: EntityId) => {
   editingId.value = id || null
   Object.assign(form, blankForm())
   if (id) {
-    Object.assign(form, await getBanner(id))
+    try {
+      Object.assign(form, await getBanner(id))
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Banner 详情加载失败')
+      return
+    }
   }
   drawer.value = true
 }
@@ -205,8 +250,18 @@ const save = async () => {
 
 const toggleStatus = async (row: AdminBanner) => {
   await updateBannerStatus(row.id, row.status === 1 ? 0 : 1)
-  message.success('状态已更新')
+  message.success(row.status === 1 ? 'Banner 已禁用' : 'Banner 已启用')
   load()
+}
+
+const confirmDeleteBanner = (row: AdminBanner) => {
+  dialog.warning({
+    title: '确认删除',
+    content: `确认删除 Banner「${row.title}」？`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: () => remove(row.id),
+  })
 }
 
 const remove = async (id: EntityId) => {
@@ -220,35 +275,57 @@ onMounted(load)
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <div>
+    <!-- 页面标题 -->
+    <header class="page-head">
+      <div class="page-head-text">
         <h1 class="page-title">Banner 管理</h1>
         <p class="page-subtitle">配置小程序首页和分类页横幅。</p>
       </div>
-      <n-button type="primary" @click="openDrawer()">
-        <template #icon>
-          <n-icon><AddOutline /></n-icon>
-        </template>
-        新建 Banner
-      </n-button>
-    </div>
-
-    <section class="panel panel-pad">
-      <div class="toolbar">
-        <n-select v-model:value="query.distributionSite" clearable :options="siteOptions" placeholder="投放位置" style="width: 160px" />
-        <n-select v-model:value="query.status" clearable :options="statusOptions" placeholder="状态" style="width: 140px" />
-        <n-button type="primary" @click="query.page = 1; load()">查询</n-button>
-        <n-button @click="query.distributionSite = null; query.status = null; query.page = 1; load()">重置</n-button>
-        <n-button :loading="loading" circle @click="load">
+      <div class="page-head-actions">
+        <n-button type="primary" @click="openDrawer()">
           <template #icon>
-            <n-icon><RefreshOutline /></n-icon>
+            <n-icon><AddOutline /></n-icon>
           </template>
+          新建 Banner
         </n-button>
+      </div>
+    </header>
+
+    <!-- 搜索区 -->
+    <section class="panel search-panel">
+      <div class="search-row search-row--filters">
+        <n-select
+          v-model:value="query.distributionSite"
+          clearable
+          :options="siteOptions"
+          placeholder="全部位置"
+          class="filter-select"
+        />
+        <n-select
+          v-model:value="query.status"
+          clearable
+          :options="statusOptions"
+          placeholder="全部状态"
+          class="filter-select filter-select--sm"
+        />
+        <div class="search-row-actions">
+          <n-button type="primary" @click="query.page = 1; load()">查询</n-button>
+          <n-button @click="resetFilters">重置</n-button>
+        </div>
       </div>
     </section>
 
+    <!-- 表格 -->
     <section class="panel">
-      <n-data-table :loading="loading" :columns="columns" :data="rows" :bordered="false" :row-key="(row: AdminBanner) => row.id" />
+      <n-data-table
+        :loading="loading"
+        :columns="columns"
+        :data="rows"
+        :bordered="false"
+        :single-line="false"
+        :row-key="(row: AdminBanner) => row.id"
+        :scroll-x="780"
+      />
       <div class="pagination-bar">
         <n-pagination
           v-model:page="query.page"
@@ -262,54 +339,70 @@ onMounted(load)
       </div>
     </section>
 
-    <n-drawer v-model:show="drawer" :width="620">
-      <n-drawer-content :title="editingId ? '编辑 Banner' : '新建 Banner'">
-        <n-form label-placement="top">
-          <n-grid :cols="2" :x-gap="14">
-            <n-form-item-gi label="标题">
-              <n-input v-model:value="form.title" />
-            </n-form-item-gi>
-            <n-form-item-gi label="投放位置">
-              <n-select v-model:value="form.distributionSite" :options="siteOptions" />
-            </n-form-item-gi>
-            <n-form-item-gi label="跳转类型">
-              <n-select v-model:value="form.type" :options="typeOptions" />
-            </n-form-item-gi>
-            <n-form-item-gi label="排序">
-              <n-input-number v-model:value="form.sortOrder" :min="0" style="width: 100%" />
-            </n-form-item-gi>
-            <n-form-item-gi label="状态">
-              <n-select v-model:value="form.status" :options="statusOptions" />
-            </n-form-item-gi>
-          </n-grid>
-          <n-form-item label="图片 URL">
-            <div class="banner-image-field">
-              <n-input v-model:value="form.imgUrl" placeholder="上传图片后自动填入，也可手动粘贴 URL" />
-              <n-upload accept="image/*" :show-file-list="false" :custom-request="uploadBannerImage">
-                <n-button :loading="bannerUploading">上传图片</n-button>
-              </n-upload>
-            </div>
-            <div v-if="form.imgUrl" class="banner-preview">
-              <img :src="form.imgUrl" alt="Banner preview" />
-            </div>
-          </n-form-item>
-          <n-form-item label="跳转 URL">
-            <n-input v-model:value="form.hrefUrl" placeholder="/pages/goods/goods?id=1" />
-          </n-form-item>
-          <n-grid :cols="2" :x-gap="14">
-            <n-form-item-gi label="开始时间">
-              <n-date-picker v-model:formatted-value="form.startTime" value-format="yyyy-MM-dd'T'HH:mm:ss" type="datetime" clearable style="width: 100%" />
-            </n-form-item-gi>
-            <n-form-item-gi label="结束时间">
-              <n-date-picker v-model:formatted-value="form.endTime" value-format="yyyy-MM-dd'T'HH:mm:ss" type="datetime" clearable style="width: 100%" />
-            </n-form-item-gi>
-          </n-grid>
-        </n-form>
+    <!-- 新建/编辑 Banner Drawer -->
+    <n-drawer v-model:show="drawer" :width="620" :auto-focus="false">
+      <n-drawer-content
+        :title="editingId ? '编辑 Banner' : '新建 Banner'"
+        :native-scrollbar="false"
+        closable
+      >
+        <div class="drawer-form">
+          <n-form label-placement="top">
+            <n-grid :cols="2" :x-gap="16">
+              <n-form-item-gi label="标题" :required="true">
+                <n-input v-model:value="form.title" placeholder="Banner 标题" />
+              </n-form-item-gi>
+              <n-form-item-gi label="投放位置" :required="true">
+                <n-select v-model:value="form.distributionSite" :options="siteOptions" />
+              </n-form-item-gi>
+              <n-form-item-gi label="跳转类型" :required="true">
+                <n-select v-model:value="form.type" :options="typeOptions" />
+              </n-form-item-gi>
+              <n-form-item-gi label="排序">
+                <n-input-number v-model:value="form.sortOrder" :min="0" style="width: 100%" />
+              </n-form-item-gi>
+              <n-form-item-gi label="状态">
+                <n-select v-model:value="form.status" :options="statusOptions" />
+              </n-form-item-gi>
+            </n-grid>
+
+            <n-form-item label="图片" :required="true">
+              <div class="banner-image-field">
+                <n-upload accept="image/*" :show-file-list="false" :custom-request="uploadBannerImage">
+                  <n-button :loading="bannerUploading">
+                    <template #icon><n-icon><ImagesOutline /></n-icon></template>
+                    {{ form.imgUrl ? '更换图片' : '上传图片' }}
+                  </n-button>
+                </n-upload>
+                <span v-if="form.imgUrl" class="banner-image-hint">建议尺寸 750×320</span>
+              </div>
+              <div v-if="form.imgUrl" class="banner-preview">
+                <img :src="form.imgUrl" alt="Banner preview" />
+              </div>
+            </n-form-item>
+
+            <n-form-item label="跳转 URL">
+              <n-input v-model:value="form.hrefUrl" placeholder="/pages/goods/goods?id=1" />
+            </n-form-item>
+
+            <n-grid :cols="2" :x-gap="16">
+              <n-form-item-gi label="开始时间">
+                <n-date-picker v-model:formatted-value="form.startTime" value-format="yyyy-MM-dd'T'HH:mm:ss" type="datetime" clearable style="width: 100%" />
+              </n-form-item-gi>
+              <n-form-item-gi label="结束时间">
+                <n-date-picker v-model:formatted-value="form.endTime" value-format="yyyy-MM-dd'T'HH:mm:ss" type="datetime" clearable style="width: 100%" />
+              </n-form-item-gi>
+            </n-grid>
+          </n-form>
+        </div>
+
         <template #footer>
-          <n-space justify="end">
+          <div class="drawer-footer">
             <n-button @click="drawer = false">取消</n-button>
-            <n-button type="primary" :loading="saving" @click="save">保存</n-button>
-          </n-space>
+            <n-button type="primary" :loading="saving" @click="save">
+              {{ editingId ? '保存修改' : '保存 Banner' }}
+            </n-button>
+          </div>
         </template>
       </n-drawer-content>
     </n-drawer>
@@ -317,50 +410,132 @@ onMounted(load)
 </template>
 
 <style scoped>
-.banner-thumb-wrap {
-  width: 104px;
-  height: 54px;
-  overflow: hidden;
-  border-radius: 6px;
-  background: #eef3f2;
-  color: #8a949f;
-  font-size: 12px;
-  line-height: 54px;
-  text-align: center;
+/* —— 搜索区 —— */
+.search-panel {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.title-cell {
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.search-row--filters {
+  width: 100%;
+}
+
+.filter-select {
+  width: 200px;
+}
+
+.filter-select--sm {
+  width: 150px;
+}
+
+.search-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* —— Banner 缩略图列 —— */
+.banner-thumb {
+  width: 96px !important;
+  min-width: 96px;
+  max-width: 96px;
+  height: 54px !important;
+  max-height: 54px;
+  border-radius: var(--radius-image);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  display: grid;
+  place-items: center;
+}
+
+.banner-thumb--empty {
+  display: grid;
+  place-items: center;
+}
+
+/* —— Banner 信息列 —— */
+.banner-meta {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  flex: 1;
 }
 
-.title-cell strong {
-  color: #17212b;
+.banner-title {
+  color: var(--color-text-primary);
   font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.title-cell span {
-  color: #758292;
+.banner-href {
+  font-family: var(--font-family-mono);
+  color: var(--color-text-tertiary);
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-text {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+/* —— 操作区 —— */
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+:deep(.dropdown-danger-item) {
+  color: var(--color-danger);
+}
+
+/* —— Drawer —— */
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .banner-image-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.banner-image-hint {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
 }
 
 .banner-preview {
   width: 100%;
-  max-width: 360px;
-  margin-top: 10px;
+  max-width: 480px;
+  margin-top: 12px;
   overflow: hidden;
-  border: 1px solid #e5e9ef;
-  border-radius: 6px;
-  background: #eef3f2;
-  aspect-ratio: 2 / 1;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-subtle);
+  aspect-ratio: 750 / 320;
 }
 
 .banner-preview img {
@@ -370,15 +545,25 @@ onMounted(load)
   object-fit: cover;
 }
 
-.pagination-bar {
-  display: flex;
-  justify-content: flex-end;
-  padding: 14px 16px 16px;
-}
-
+/* —— Responsive —— */
 @media (max-width: 640px) {
   .banner-image-field {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .search-row--filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-select,
+  .filter-select--sm {
+    width: 100%;
+  }
+
+  .search-row-actions {
+    margin-left: 0;
   }
 }
 </style>

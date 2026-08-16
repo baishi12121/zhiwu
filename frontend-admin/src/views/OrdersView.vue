@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import type { DataTableColumns, SelectOption } from 'naive-ui'
-import { NButton, NImage, NSpace, NTag, useMessage } from 'naive-ui'
-import { RefreshOutline, SearchOutline } from '@vicons/ionicons5'
+import { NButton, NImage, NTag, useMessage } from 'naive-ui'
+import { SearchOutline } from '@vicons/ionicons5'
 import OrderStatusTag from '@/components/OrderStatusTag.vue'
 import { getOrder, listLogisticsCompanies, listOrders, shipOrder } from '@/api/orders'
 import type { AdminOrder, EntityId, LogisticsCompany } from '@/types/admin'
@@ -57,8 +57,11 @@ const companyOptions = computed<SelectOption[]>(() =>
 
 const pendingShipmentCount = computed(() => rows.value.filter((row) => row.orderState === 2).length)
 
-const money = (value?: number) =>
-  new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(Number(value || 0))
+// 价格格式化：¥299.00 强调
+const money = (value?: number) => {
+  const num = Number(value || 0)
+  return `¥${num.toFixed(2)}`
+}
 
 const dateText = (value?: string) => (value ? value.replace('T', ' ').slice(0, 19) : '-')
 
@@ -77,25 +80,27 @@ const stateText = (state?: number) => stateOptions.find((item) => item.value ===
 
 const columns: DataTableColumns<AdminOrder> = [
   {
-    title: '订单号',
-    key: 'orderNo',
-    width: 190,
-    render(row) {
-      return h('span', { class: 'id-cell' }, row.orderNo)
-    },
-  },
-  {
-    title: '商品',
+    title: '订单商品',
     key: 'itemName',
-    minWidth: 260,
+    minWidth: 320,
     render(row) {
       return h('div', { class: 'goods-cell' }, [
         row.itemImage
-          ? h(NImage, { src: row.itemImage, width: 46, height: 46, objectFit: 'cover', class: 'goods-image' })
-          : h('div', { class: 'goods-image goods-image--empty' }),
+          ? h(NImage, {
+              src: row.itemImage,
+              width: 52,
+              height: 52,
+              objectFit: 'cover',
+              class: 'goods-image',
+              previewDisabled: true,
+            })
+          : h('div', { class: 'goods-image goods-image--empty' }, '—'),
         h('div', { class: 'goods-meta' }, [
-          h('strong', row.itemName || '订单商品'),
-          h('span', `${row.totalNum || 0} 件 / ${row.itemCount || 0} 类`),
+          h('strong', { class: 'goods-name' }, row.itemName || '订单商品'),
+          h('div', { class: 'goods-sub' }, [
+            h('span', { class: 'goods-qty' }, `${row.totalNum || 0} 件 / ${row.itemCount || 0} 类`),
+          ]),
+          h('span', { class: 'goods-order-no' }, row.orderNo),
         ]),
       ])
     },
@@ -106,34 +111,62 @@ const columns: DataTableColumns<AdminOrder> = [
     width: 150,
     render(row) {
       return h('div', { class: 'receiver-cell' }, [
-        h('strong', row.receiverContact || '-'),
-        h('span', row.receiverMobile || '-'),
+        h('strong', { class: 'receiver-name' }, row.receiverContact || '-'),
+        h('span', { class: 'receiver-mobile' }, row.receiverMobile || '-'),
       ])
     },
   },
-  { title: '实付金额', key: 'payMoney', width: 120, render: (row) => money(row.payMoney) },
+  {
+    title: '实付金额',
+    key: 'payMoney',
+    width: 130,
+    render: (row) =>
+      h('div', { class: 'price-cell' }, [
+        h('span', { class: 'price-symbol' }, '¥'),
+        h('span', { class: 'price-value' }, Number(row.payMoney || 0).toFixed(2)),
+      ]),
+  },
   {
     title: '来源',
     key: 'orderSource',
-    width: 100,
+    width: 90,
     render(row) {
       return row.orderSource === 2
-        ? h(NTag, { size: 'small', type: 'error', round: true }, { default: () => '秒杀' })
-        : h(NTag, { size: 'small', round: true }, { default: () => '普通' })
+        ? h(
+            NTag,
+            {
+              size: 'small',
+              round: true,
+              bordered: false,
+              color: {
+                color: 'rgba(245, 158, 11, 0.14)',
+                textColor: '#B06F0A',
+                borderColor: 'transparent',
+              },
+            },
+            { default: () => '秒杀' },
+          )
+        : h('span', { class: 'source-text' }, '普通')
     },
   },
-  { title: '状态', key: 'orderState', width: 100, render: (row) => h(OrderStatusTag, { value: row.orderState }) },
-  { title: '下单时间', key: 'createTime', width: 170, render: (row) => dateText(row.createTime) },
+  { title: '状态', key: 'orderState', width: 110, render: (row) => h(OrderStatusTag, { value: row.orderState }) },
+  { title: '下单时间', key: 'createTime', width: 160, render: (row) => dateText(row.createTime) },
   {
     title: '操作',
     key: 'actions',
-    width: 150,
+    width: 160,
+    fixed: 'right',
     render(row) {
-      return h(NSpace, { size: 8 }, () => [
+      return h('div', { class: 'row-actions' }, [
         h(NButton, { size: 'small', onClick: () => openDetail(row.id) }, { default: () => '详情' }),
         h(
           NButton,
-          { size: 'small', type: 'primary', disabled: row.orderState !== 2, onClick: () => openShip(row) },
+          {
+            size: 'small',
+            type: 'primary',
+            disabled: row.orderState !== 2,
+            onClick: () => openShip(row),
+          },
           { default: () => '发货' },
         ),
       ])
@@ -238,41 +271,74 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <div>
+    <!-- 页面标题 -->
+    <header class="page-head">
+      <div class="page-head-text">
         <h1 class="page-title">订单管理</h1>
         <p class="page-subtitle">查看订单状态、物流信息，并处理待发货订单。</p>
       </div>
-    </div>
+    </header>
 
-    <section class="panel panel-pad">
-      <n-tabs :value="query.orderState" type="segment" animated @update:value="setState">
+    <!-- 状态 Tabs + 搜索区 合并 Card -->
+    <section class="panel search-panel">
+      <n-tabs
+        :value="query.orderState"
+        type="line"
+        animated
+        size="medium"
+        class="state-tabs"
+        @update:value="setState"
+      >
         <n-tab v-for="item in stateOptions" :key="String(item.value)" :name="item.value" :tab="item.label">
           <template v-if="item.value === 2 && pendingShipmentCount" #suffix>
             <n-badge :value="pendingShipmentCount" type="warning" />
           </template>
         </n-tab>
       </n-tabs>
-      <div class="toolbar order-toolbar">
-        <n-input v-model:value="query.keyword" clearable placeholder="订单号 / 收货人 / 手机号" style="width: 260px">
+
+      <div class="search-row search-row--filters">
+        <n-input
+          v-model:value="query.keyword"
+          clearable
+          placeholder="搜索订单号 / 收货人 / 手机号"
+          class="search-input"
+        >
           <template #prefix>
-            <n-icon><SearchOutline /></n-icon>
+            <n-icon :color="'#98A2B3'"><SearchOutline /></n-icon>
           </template>
         </n-input>
-        <n-select v-model:value="query.orderSource" clearable :options="sourceOptions" placeholder="订单来源" style="width: 140px" />
-        <n-date-picker v-model:value="dateRange" type="daterange" clearable style="width: 260px" />
-        <n-button type="primary" @click="query.page = 1; load()">查询</n-button>
-        <n-button @click="reset">重置</n-button>
-        <n-button :loading="loading" circle @click="load">
-          <template #icon>
-            <n-icon><RefreshOutline /></n-icon>
-          </template>
-        </n-button>
+        <n-select
+          v-model:value="query.orderSource"
+          clearable
+          :options="sourceOptions"
+          placeholder="全部来源"
+          class="filter-select filter-select--sm"
+        />
+        <n-date-picker
+          v-model:value="dateRange"
+          type="daterange"
+          clearable
+          placeholder="选择日期范围"
+          class="filter-date-range"
+        />
+        <div class="search-row-actions">
+          <n-button type="primary" @click="query.page = 1; load()">查询</n-button>
+          <n-button @click="reset">重置</n-button>
+        </div>
       </div>
     </section>
 
+    <!-- 表格 -->
     <section class="panel">
-      <n-data-table :loading="loading" :columns="columns" :data="rows" :bordered="false" />
+      <n-data-table
+        :loading="loading"
+        :columns="columns"
+        :data="rows"
+        :bordered="false"
+        :single-line="false"
+        :row-key="(row: AdminOrder) => row.id"
+        :scroll-x="1000"
+      />
       <div class="pagination-bar">
         <n-pagination
           v-model:page="query.page"
@@ -286,166 +352,425 @@ onMounted(() => {
       </div>
     </section>
 
-    <n-drawer v-model:show="detailDrawer" :width="760">
-      <n-drawer-content title="订单详情">
+    <!-- 订单详情 Drawer -->
+    <n-drawer v-model:show="detailDrawer" :width="760" :auto-focus="false">
+      <n-drawer-content title="订单详情" :native-scrollbar="false" closable>
         <n-spin :show="detailLoading">
           <template v-if="currentOrder">
-            <n-descriptions bordered :column="2" label-placement="left">
-              <n-descriptions-item label="订单号">{{ currentOrder.orderNo }}</n-descriptions-item>
-              <n-descriptions-item label="状态"><OrderStatusTag :value="currentOrder.orderState" /></n-descriptions-item>
-              <n-descriptions-item label="用户">{{ currentOrder.nickname || currentOrder.userId }}</n-descriptions-item>
-              <n-descriptions-item label="来源">{{ currentOrder.orderSource === 2 ? '秒杀' : '普通' }}</n-descriptions-item>
-              <n-descriptions-item label="实付">{{ money(currentOrder.payMoney) }}</n-descriptions-item>
-              <n-descriptions-item label="优惠">{{ money(currentOrder.discountAmount) }}</n-descriptions-item>
-              <n-descriptions-item label="收货人">{{ currentOrder.receiverContact || '-' }}</n-descriptions-item>
-              <n-descriptions-item label="手机号">{{ currentOrder.receiverMobile || '-' }}</n-descriptions-item>
-              <n-descriptions-item label="地址" :span="2">{{ currentOrder.receiverAddress || '-' }}</n-descriptions-item>
-              <n-descriptions-item label="买家留言" :span="2">{{ currentOrder.buyerMessage || '-' }}</n-descriptions-item>
-              <n-descriptions-item label="下单">{{ dateText(currentOrder.createTime) }}</n-descriptions-item>
-              <n-descriptions-item label="付款">{{ dateText(currentOrder.paidAt) }}</n-descriptions-item>
-              <n-descriptions-item label="发货">{{ dateText(currentOrder.shippedAt) }}</n-descriptions-item>
-              <n-descriptions-item label="完成">{{ dateText(currentOrder.completedAt) }}</n-descriptions-item>
-            </n-descriptions>
+            <div class="detail-section">
+              <h3 class="form-section-title">基础信息</h3>
+              <n-descriptions :column="2" label-placement="left" bordered>
+                <n-descriptions-item label="订单号">
+                  <span class="order-no-text">{{ currentOrder.orderNo }}</span>
+                </n-descriptions-item>
+                <n-descriptions-item label="状态">
+                  <OrderStatusTag :value="currentOrder.orderState" />
+                </n-descriptions-item>
+                <n-descriptions-item label="用户">{{ currentOrder.nickname || currentOrder.userId }}</n-descriptions-item>
+                <n-descriptions-item label="来源">
+                  <n-tag
+                    v-if="currentOrder.orderSource === 2"
+                    size="small"
+                    round
+                    :bordered="false"
+                    :color="{ color: 'rgba(245, 158, 11, 0.14)', textColor: '#B06F0A', borderColor: 'transparent' }"
+                  >秒杀</n-tag>
+                  <span v-else>普通</span>
+                </n-descriptions-item>
+                <n-descriptions-item label="实付">
+                  <span class="price-cell">
+                    <span class="price-symbol">¥</span>
+                    <span class="price-value">{{ Number(currentOrder.payMoney || 0).toFixed(2) }}</span>
+                  </span>
+                </n-descriptions-item>
+                <n-descriptions-item label="优惠">{{ money(currentOrder.discountAmount) }}</n-descriptions-item>
+              </n-descriptions>
+            </div>
 
-            <n-divider title-placement="left">商品明细</n-divider>
-            <div class="detail-items">
-              <div v-for="item in currentOrder.items || []" :key="item.id" class="detail-item">
-                <n-image v-if="item.image" :src="item.image" width="54" height="54" object-fit="cover" />
-                <div class="detail-item-main">
-                  <strong>{{ item.name }}</strong>
-                  <span>{{ item.attrsText || item.skuCode || '默认规格' }}</span>
-                </div>
-                <div class="detail-item-pay">
-                  <strong>{{ money(item.realPay) }}</strong>
-                  <span>x {{ item.quantity }}</span>
+            <div class="detail-section">
+              <h3 class="form-section-title">收货信息</h3>
+              <n-descriptions :column="2" label-placement="left" bordered>
+                <n-descriptions-item label="收货人">{{ currentOrder.receiverContact || '-' }}</n-descriptions-item>
+                <n-descriptions-item label="手机号">{{ currentOrder.receiverMobile || '-' }}</n-descriptions-item>
+                <n-descriptions-item label="地址" :span="2">{{ currentOrder.receiverAddress || '-' }}</n-descriptions-item>
+                <n-descriptions-item label="买家留言" :span="2">{{ currentOrder.buyerMessage || '-' }}</n-descriptions-item>
+              </n-descriptions>
+            </div>
+
+            <div class="detail-section">
+              <h3 class="form-section-title">时间线</h3>
+              <n-descriptions :column="2" label-placement="left" bordered>
+                <n-descriptions-item label="下单">{{ dateText(currentOrder.createTime) }}</n-descriptions-item>
+                <n-descriptions-item label="付款">{{ dateText(currentOrder.paidAt) }}</n-descriptions-item>
+                <n-descriptions-item label="发货">{{ dateText(currentOrder.shippedAt) }}</n-descriptions-item>
+                <n-descriptions-item label="完成">{{ dateText(currentOrder.completedAt) }}</n-descriptions-item>
+              </n-descriptions>
+            </div>
+
+            <div class="detail-section">
+              <h3 class="form-section-title">商品明细</h3>
+              <div class="detail-items">
+                <div v-for="item in currentOrder.items || []" :key="item.id" class="detail-item">
+                  <n-image
+                    v-if="item.image"
+                    :src="item.image"
+                    width="56"
+                    height="56"
+                    object-fit="cover"
+                    preview-disabled
+                    class="detail-item-img"
+                  />
+                  <div v-else class="detail-item-img detail-item-img--empty">—</div>
+                  <div class="detail-item-main">
+                    <strong class="detail-item-name">{{ item.name }}</strong>
+                    <span class="detail-item-attr">{{ item.attrsText || item.skuCode || '默认规格' }}</span>
+                  </div>
+                  <div class="detail-item-pay">
+                    <span class="price-cell">
+                      <span class="price-symbol">¥</span>
+                      <span class="price-value">{{ Number(item.realPay || 0).toFixed(2) }}</span>
+                    </span>
+                    <span class="detail-item-qty">x {{ item.quantity }}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <n-divider title-placement="left">状态流转</n-divider>
-            <n-timeline>
-              <n-timeline-item
-                v-for="log in currentOrder.statusLogs || []"
-                :key="log.id"
-                :title="`${stateText(log.fromState)} → ${stateText(log.toState)}`"
-                :content="`${operatorText(log.operator)}｜${log.remark || '-'}`"
-                :time="dateText(log.createTime)"
-              />
-            </n-timeline>
-
-            <n-divider title-placement="left">物流信息</n-divider>
-            <template v-if="currentOrder.logistics">
-              <n-descriptions bordered :column="2" label-placement="left">
-                <n-descriptions-item label="物流公司">{{ currentOrder.logistics.companyName || '-' }}</n-descriptions-item>
-                <n-descriptions-item label="运单号">{{ currentOrder.logistics.logisticsNo || '-' }}</n-descriptions-item>
-              </n-descriptions>
-              <n-timeline class="track-timeline">
+            <div class="detail-section">
+              <h3 class="form-section-title">状态流转</h3>
+              <n-timeline>
                 <n-timeline-item
-                  v-for="track in currentOrder.logistics.track || []"
-                  :key="track.id"
-                  :content="track.content"
-                  :time="dateText(track.occurTime)"
+                  v-for="log in currentOrder.statusLogs || []"
+                  :key="log.id"
+                  :title="`${stateText(log.fromState)} → ${stateText(log.toState)}`"
+                  :content="`${operatorText(log.operator)}｜${log.remark || '-'}`"
+                  :time="dateText(log.createTime)"
                 />
               </n-timeline>
-            </template>
-            <n-empty v-else description="暂无物流信息" />
+            </div>
+
+            <div class="detail-section">
+              <h3 class="form-section-title">物流信息</h3>
+              <template v-if="currentOrder.logistics">
+                <n-descriptions :column="2" label-placement="left" bordered>
+                  <n-descriptions-item label="物流公司">{{ currentOrder.logistics.companyName || '-' }}</n-descriptions-item>
+                  <n-descriptions-item label="运单号">{{ currentOrder.logistics.logisticsNo || '-' }}</n-descriptions-item>
+                </n-descriptions>
+                <n-timeline class="track-timeline">
+                  <n-timeline-item
+                    v-for="track in currentOrder.logistics.track || []"
+                    :key="track.id"
+                    :content="track.content"
+                    :time="dateText(track.occurTime)"
+                  />
+                </n-timeline>
+              </template>
+              <n-empty v-else description="暂无物流信息" />
+            </div>
           </template>
         </n-spin>
       </n-drawer-content>
     </n-drawer>
 
-    <n-modal v-model:show="shipModal" preset="dialog" title="订单发货" positive-text="保存" negative-text="取消" :loading="shipSaving" @positive-click="submitShip">
-      <n-form label-placement="top">
+    <!-- 发货 Modal -->
+    <n-modal v-model:show="shipModal" preset="dialog" title="订单发货" :show-icon="false" style="width: 480px">
+      <n-form label-placement="top" class="ship-form">
         <n-form-item label="物流公司">
-          <n-select v-model:value="shipForm.companyId" :options="companyOptions" placeholder="请选择物流公司" />
+          <n-select
+            v-model:value="shipForm.companyId"
+            :options="companyOptions"
+            placeholder="请选择物流公司"
+            filterable
+          />
         </n-form-item>
         <n-form-item label="运单号">
           <n-input v-model:value="shipForm.logisticsNo" clearable placeholder="请输入快递运单号" />
         </n-form-item>
       </n-form>
+      <template #action>
+        <n-button @click="shipModal = false">取消</n-button>
+        <n-button type="primary" :loading="shipSaving" @click="submitShip">确认发货</n-button>
+      </template>
     </n-modal>
   </div>
 </template>
 
 <style scoped>
-.order-toolbar {
-  margin-top: 14px;
-}
-
-.pagination-bar {
+/* —— 搜索区 —— */
+.search-panel {
+  padding: 0 20px 20px;
   display: flex;
-  justify-content: flex-end;
-  padding: 14px 16px 16px;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.id-cell {
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-  white-space: nowrap;
+.state-tabs {
+  margin: 0 -20px;
+  padding: 0 20px;
 }
 
-.goods-cell,
-.detail-item {
+:deep(.state-tabs .n-tabs-tab) {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 0;
+}
+
+.search-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.search-row--filters {
+  width: 100%;
+}
+
+.search-input {
+  width: 280px;
+  max-width: 100%;
+}
+
+.filter-select {
+  width: 180px;
+}
+
+.filter-select--sm {
+  width: 140px;
+}
+
+.filter-date-range {
+  width: 280px;
+}
+
+.search-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* —— 订单商品列 —— */
+.goods-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .goods-image {
-  width: 46px;
-  height: 46px;
-  border-radius: 6px;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-image);
   overflow: hidden;
-  flex: 0 0 auto;
-}
-
-.goods-image--empty {
-  background: #e7eeee;
-}
-
-.goods-meta,
-.receiver-cell,
-.detail-item-main,
-.detail-item-pay {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.goods-meta strong,
-.receiver-cell strong,
-.detail-item-main strong {
-  color: #17212b;
-  font-size: 13px;
-}
-
-.goods-meta span,
-.receiver-cell span,
-.detail-item-main span,
-.detail-item-pay span {
-  color: #758292;
+  flex-shrink: 0;
+  background: var(--color-surface-subtle);
+  display: grid;
+  place-items: center;
+  color: var(--color-text-tertiary);
   font-size: 12px;
 }
 
-.detail-items {
-  display: grid;
-  gap: 10px;
+.goods-image--empty {
+  background: var(--color-surface-subtle);
 }
 
-.detail-item {
-  padding: 10px 0;
-  border-bottom: 1px solid #edf1f2;
-}
-
-.detail-item-main {
+.goods-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
   flex: 1;
 }
 
+.goods-name {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goods-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.goods-qty {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.goods-order-no {
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+
+/* —— 收货人 —— */
+.receiver-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.receiver-name {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+}
+
+.receiver-mobile {
+  font-family: var(--font-family-mono);
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+/* —— 价格 —— */
+.price-cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+}
+
+.price-symbol {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+}
+
+.price-value {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.01em;
+}
+
+/* —— 来源 —— */
+.source-text {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+/* —— 操作 —— */
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* —— 详情 Drawer —— */
+.detail-section {
+  margin-bottom: 24px;
+}
+
+.order-no-text {
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.detail-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-subtle);
+}
+
+.detail-item-img {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-image);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--color-surface);
+  display: grid;
+  place-items: center;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.detail-item-img--empty {
+  background: var(--color-surface-subtle);
+}
+
+.detail-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-item-name {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-item-attr {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
 .detail-item-pay {
+  display: flex;
+  flex-direction: column;
   align-items: flex-end;
+  gap: 2px;
+}
+
+.detail-item-qty {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
 }
 
 .track-timeline {
   margin-top: 14px;
+}
+
+/* —— 发货表单 —— */
+.ship-form {
+  padding: 8px 0 4px;
+}
+
+/* —— Responsive —— */
+@media (max-width: 760px) {
+  .search-row--filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-input,
+  .filter-select,
+  .filter-select--sm,
+  .filter-date-range {
+    width: 100%;
+  }
+
+  .search-row-actions {
+    margin-left: 0;
+  }
+
+  .goods-cell {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>

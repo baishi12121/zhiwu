@@ -17,6 +17,7 @@ const router = createRouter({
         { path: '', redirect: '/dashboard' },
         { path: 'dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
         { path: 'products', name: 'products', component: () => import('@/views/ProductsView.vue') },
+        { path: 'categories', name: 'categories', component: () => import('@/views/CategoriesView.vue') },
         { path: 'banners', name: 'banners', component: () => import('@/views/BannersView.vue') },
         { path: 'seckill', name: 'seckill', component: () => import('@/views/SeckillView.vue') },
         { path: 'orders', name: 'orders', component: () => import('@/views/OrdersView.vue') },

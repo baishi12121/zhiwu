@@ -37,14 +37,22 @@ export interface BaseEntity {
   updateTime?: string
 }
 
-export interface AdminCategory {
-  id: EntityId
+export interface AdminCategory extends BaseEntity {
   parentId?: EntityId
   name: string
   icon?: string
   picture?: string
   sortOrder?: number
   status?: number
+}
+
+export interface CategorySaveRequest {
+  parentId?: EntityId | null
+  name?: string
+  icon?: string | null
+  picture?: string | null
+  sortOrder?: number | null
+  status?: number | null
 }
 
 export interface AdminBanner extends BaseEntity {

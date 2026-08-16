@@ -27,6 +27,8 @@ public interface AdminProductService {
     public void updateSkuStatus(Long skuId, Integer status);
     public void adjustSkuStock(Long skuId, StockAdjustRequest req);
     public List<AdminCategory> listAllCategories();
+    public Long createCategory(CategorySaveRequest req);
     public void updateCategory(Long id, CategorySaveRequest req);
+    public void deleteCategory(Long id);
 
 }

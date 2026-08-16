@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref } from 'vue'
-import type { DataTableColumns, SelectOption } from 'naive-ui'
-import { NButton, NPopconfirm, NSpace, useMessage } from 'naive-ui'
-import { AddOutline, RefreshOutline } from '@vicons/ionicons5'
+import type { DataTableColumns, DropdownOption, SelectOption } from 'naive-ui'
+import { NButton, NDropdown, NIcon, useDialog, useMessage } from 'naive-ui'
+import {
+  AddOutline,
+  ArrowDownOutline,
+  CartOutline,
+  CreateOutline,
+  PricetagsOutline,
+  TrashOutline,
+} from '@vicons/ionicons5'
 import StatusTag from '@/components/StatusTag.vue'
 import { listProducts, listSkus } from '@/api/products'
 import {
@@ -20,6 +27,7 @@ import {
 import type { AdminProduct, AdminProductSku, EntityId, SeckillActivity, SeckillItem } from '@/types/admin'
 
 const message = useMessage()
+const dialog = useDialog()
 const loading = ref(false)
 const rows = ref<SeckillActivity[]>([])
 const total = ref(0)
@@ -44,6 +52,7 @@ const itemFormDrawer = ref(false)
 const itemSaving = ref(false)
 const currentActivity = ref<SeckillActivity | null>(null)
 const items = ref<SeckillItem[]>([])
+const itemLoading = ref(false)
 const editingItemId = ref<EntityId | null>(null)
 const itemForm = reactive<Partial<SeckillItem>>({
   spuId: undefined,
@@ -86,49 +95,105 @@ const parseDateTime = (value?: string) => (value ? new Date(value).getTime() : D
 const money = (value?: number) =>
   new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(Number(value || 0))
 
+const moneyParts = (value?: number) => ({
+  symbol: '¥',
+  amount: Number(value || 0).toFixed(2),
+})
+
+const formatDate = (value?: string) => {
+  if (!value) return '-'
+  return value.replace('T', ' ')
+}
+
 const columns: DataTableColumns<SeckillActivity> = [
   {
-    title: 'ID',
-    key: 'id',
-    width: 190,
+    title: '活动',
+    key: 'name',
+    minWidth: 260,
     render(row) {
-      return h('span', { class: 'id-cell' }, String(row.id))
+      return h('div', { class: 'activity-cell' }, [
+        h('strong', { class: 'activity-name' }, row.name),
+        h('span', { class: 'activity-id' }, `ID ${row.id}`),
+      ])
     },
   },
-  { title: '活动名称', key: 'name', minWidth: 180 },
-  { title: '开始时间', key: 'startTime', minWidth: 170 },
-  { title: '结束时间', key: 'endTime', minWidth: 170 },
+  {
+    title: '开始时间',
+    key: 'startTime',
+    minWidth: 170,
+    render: (row) => h('span', { class: 'cell-text' }, formatDate(row.startTime)),
+  },
+  {
+    title: '结束时间',
+    key: 'endTime',
+    minWidth: 170,
+    render: (row) => h('span', { class: 'cell-text' }, formatDate(row.endTime)),
+  },
   {
     title: '商品数',
     key: 'itemCount',
     width: 100,
-    render: (row) => h('span', { class: row.itemCount ? 'count-hot' : 'count-muted' }, String(row.itemCount || 0)),
+    render: (row) =>
+      h('span', { class: row.itemCount ? 'count-hot' : 'count-muted' }, String(row.itemCount || 0)),
   },
   {
     title: '状态',
     key: 'enabled',
+    width: 110,
     render: (row) => h(StatusTag, { value: row.enabled, activeText: '启用', inactiveText: '禁用' }),
   },
-  { title: '备注', key: 'remark', ellipsis: { tooltip: true } },
+  { title: '备注', key: 'remark', ellipsis: { tooltip: true }, render: (row) => h('span', { class: 'cell-text' }, row.remark || '-') },
   {
     title: '操作',
     key: 'actions',
-    width: 300,
+    width: 200,
+    fixed: 'right',
     render(row) {
-      return h(NSpace, { size: 8 }, () => [
-        h(NButton, { size: 'small', onClick: () => openActivityDrawer(row) }, { default: () => '编辑' }),
-        h(NButton, { size: 'small', onClick: () => openItemDrawer(row) }, { default: () => '商品' }),
+      const dropdownOptions: DropdownOption[] = [
+        {
+          label: '管理商品',
+          key: 'manage-items',
+          icon: () => h(NIcon, null, { default: () => h(CartOutline) }),
+        },
+        {
+          label: row.enabled === 1 ? '禁用活动' : '启用活动',
+          key: 'toggle-status',
+          icon: () => h(NIcon, null, { default: () => h(PricetagsOutline) }),
+        },
+        { type: 'divider', key: 'd1' },
+        {
+          label: '删除活动',
+          key: 'delete',
+          icon: () => h(NIcon, { color: '#D03050' }, { default: () => h(TrashOutline) }),
+        },
+      ]
+      return h('div', { class: 'row-actions' }, [
         h(
           NButton,
-          { size: 'small', type: row.enabled === 1 ? 'warning' : 'success', onClick: () => toggleActivity(row) },
-          { default: () => (row.enabled === 1 ? '禁用' : '启用') },
+          { size: 'small', type: 'primary', onClick: () => openActivityDrawer(row) },
+          { default: () => '编辑', icon: () => h(NIcon, null, { default: () => h(CreateOutline) }) },
         ),
         h(
-          NPopconfirm,
-          { onPositiveClick: () => removeActivity(row.id) },
+          NDropdown,
           {
-            trigger: () => h(NButton, { size: 'small', type: 'error' }, { default: () => '删除' }),
-            default: () => `确认删除活动「${row.name}」？`,
+            trigger: 'click',
+            options: dropdownOptions,
+            onSelect: (key: string) => {
+              if (key === 'manage-items') openItemDrawer(row)
+              else if (key === 'toggle-status') toggleActivity(row)
+              else if (key === 'delete') confirmDeleteActivity(row)
+            },
+          },
+          {
+            default: () =>
+              h(
+                NButton,
+                { size: 'small', quaternary: true },
+                {
+                  default: () => '更多',
+                  icon: () => h(NIcon, null, { default: () => h(ArrowDownOutline) }),
+                },
+              ),
           },
         ),
       ])
@@ -138,42 +203,102 @@ const columns: DataTableColumns<SeckillActivity> = [
 
 const itemColumns: DataTableColumns<SeckillItem> = [
   {
-    title: 'ID',
-    key: 'id',
-    width: 190,
+    title: '商品',
+    key: 'spuName',
+    minWidth: 220,
     render(row) {
-      return h('span', { class: 'id-cell' }, String(row.id))
+      return h('div', { class: 'item-cell' }, [
+        h('strong', { class: 'item-name' }, row.spuName || `SPU ${row.spuId}`),
+        h('span', { class: 'item-sku' }, `SKU ${row.skuCode || row.skuId}`),
+      ])
     },
   },
-  { title: '商品', key: 'spuName', render: (row) => row.spuName || row.spuId },
-  { title: 'SKU', key: 'skuCode', render: (row) => row.skuCode || row.skuId },
-  { title: '原价', key: 'originalPrice', render: (row) => money(row.originalPrice) },
-  { title: '秒杀价', key: 'seckillPrice', render: (row) => money(row.seckillPrice) },
-  { title: '秒杀库存', key: 'seckillStock' },
-  { title: '限购', key: 'limitPerUser' },
+  {
+    title: '原价',
+    key: 'originalPrice',
+    width: 120,
+    render: (row) => {
+      const parts = moneyParts(row.originalPrice)
+      return h('span', { class: 'price-cell price-cell--muted' }, [
+        h('span', { class: 'price-symbol' }, parts.symbol),
+        h('span', { class: 'price-amount' }, parts.amount),
+      ])
+    },
+  },
+  {
+    title: '秒杀价',
+    key: 'seckillPrice',
+    width: 120,
+    render: (row) => {
+      const parts = moneyParts(row.seckillPrice)
+      return h('span', { class: 'price-cell' }, [
+        h('span', { class: 'price-symbol' }, parts.symbol),
+        h('span', { class: 'price-amount price-amount--hot' }, parts.amount),
+      ])
+    },
+  },
+  {
+    title: '秒杀库存',
+    key: 'seckillStock',
+    width: 110,
+    render: (row) => {
+      const stock = Number(row.seckillStock || 0)
+      const cls = stock === 0 ? 'stock-danger' : stock < 10 ? 'stock-warning' : 'stock-normal'
+      return h('span', { class: `count-cell ${cls}` }, String(stock))
+    },
+  },
+  { title: '限购', key: 'limitPerUser', width: 90, render: (row) => h('span', { class: 'cell-text' }, String(row.limitPerUser ?? 1)) },
   {
     title: '状态',
     key: 'status',
+    width: 110,
     render: (row) => h(StatusTag, { value: row.status, activeText: '上架', inactiveText: '下架' }),
   },
   {
     title: '操作',
     key: 'actions',
-    width: 250,
+    width: 200,
+    fixed: 'right',
     render(row) {
-      return h(NSpace, { size: 8 }, () => [
-        h(NButton, { size: 'small', onClick: () => openItemForm(row) }, { default: () => '编辑' }),
+      const dropdownOptions: DropdownOption[] = [
+        {
+          label: row.status === 1 ? '下架' : '上架',
+          key: 'toggle-status',
+          icon: () => h(NIcon, null, { default: () => h(PricetagsOutline) }),
+        },
+        { type: 'divider', key: 'd1' },
+        {
+          label: '移出活动',
+          key: 'delete',
+          icon: () => h(NIcon, { color: '#D03050' }, { default: () => h(TrashOutline) }),
+        },
+      ]
+      return h('div', { class: 'row-actions' }, [
         h(
           NButton,
-          { size: 'small', type: row.status === 1 ? 'warning' : 'success', onClick: () => toggleItem(row) },
-          { default: () => (row.status === 1 ? '下架' : '上架') },
+          { size: 'small', type: 'primary', onClick: () => openItemForm(row) },
+          { default: () => '编辑', icon: () => h(NIcon, null, { default: () => h(CreateOutline) }) },
         ),
         h(
-          NPopconfirm,
-          { onPositiveClick: () => removeItem(row.id) },
+          NDropdown,
           {
-            trigger: () => h(NButton, { size: 'small', type: 'error' }, { default: () => '移出' }),
-            default: () => '确认移出该秒杀商品？',
+            trigger: 'click',
+            options: dropdownOptions,
+            onSelect: (key: string) => {
+              if (key === 'toggle-status') toggleItem(row)
+              if (key === 'delete') confirmDeleteItem(row)
+            },
+          },
+          {
+            default: () =>
+              h(
+                NButton,
+                { size: 'small', quaternary: true },
+                {
+                  default: () => '更多',
+                  icon: () => h(NIcon, null, { default: () => h(ArrowDownOutline) }),
+                },
+              ),
           },
         ),
       ])
@@ -184,7 +309,7 @@ const itemColumns: DataTableColumns<SeckillItem> = [
 const renderItemEmpty = () =>
   h('div', { class: 'item-empty' }, [
     h('div', { class: 'item-empty-title' }, '当前活动还没有秒杀商品'),
-    h('div', { class: 'item-empty-desc' }, '商品只会显示在它加入的活动下面，请先点“加入商品”把库存 SKU 加到这个活动。'),
+    h('div', { class: 'item-empty-desc' }, '点击右上角「加入商品」，从商品库存中选择 SKU 加入到这个活动。'),
   ])
 
 const setProductOptions = (list: AdminProduct[]) => {
@@ -266,6 +391,12 @@ const load = async () => {
   }
 }
 
+const resetFilters = () => {
+  query.enabled = null
+  query.page = 1
+  load()
+}
+
 const openActivityDrawer = (activity?: SeckillActivity) => {
   editingActivityId.value = activity?.id || null
   Object.assign(activityForm, {
@@ -309,8 +440,18 @@ const saveActivity = async () => {
 
 const toggleActivity = async (row: SeckillActivity) => {
   await updateActivityEnabled(row.id, row.enabled === 1 ? 0 : 1)
-  message.success('活动状态已更新')
+  message.success(row.enabled === 1 ? '活动已禁用' : '活动已启用')
   load()
+}
+
+const confirmDeleteActivity = (row: SeckillActivity) => {
+  dialog.warning({
+    title: '确认删除',
+    content: `确认删除活动「${row.name}」？`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: () => removeActivity(row.id),
+  })
 }
 
 const removeActivity = async (id: EntityId) => {
@@ -319,10 +460,22 @@ const removeActivity = async (id: EntityId) => {
   load()
 }
 
+const loadItems = async () => {
+  if (!currentActivity.value) return
+  itemLoading.value = true
+  try {
+    items.value = await listItems(currentActivity.value.id)
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '秒杀商品加载失败')
+  } finally {
+    itemLoading.value = false
+  }
+}
+
 const openItemDrawer = async (activity: SeckillActivity) => {
   currentActivity.value = activity
   itemDrawer.value = true
-  items.value = await listItems(activity.id)
+  await loadItems()
 }
 
 const openItemForm = async (item?: SeckillItem) => {
@@ -369,7 +522,7 @@ const saveItem = async () => {
       message.success('秒杀商品已加入')
     }
     itemFormDrawer.value = false
-    items.value = await listItems(currentActivity.value.id)
+    await loadItems()
   } catch (error) {
     message.error(error instanceof Error ? error.message : '秒杀商品保存失败')
   } finally {
@@ -380,15 +533,25 @@ const saveItem = async () => {
 const toggleItem = async (item: SeckillItem) => {
   if (!currentActivity.value) return
   await updateItemStatus(item.id, item.status === 1 ? 0 : 1)
-  message.success('秒杀商品状态已更新')
-  items.value = await listItems(currentActivity.value.id)
+  message.success(item.status === 1 ? '秒杀商品已下架' : '秒杀商品已上架')
+  await loadItems()
+}
+
+const confirmDeleteItem = (row: SeckillItem) => {
+  dialog.warning({
+    title: '确认移出',
+    content: '确认将该商品移出当前活动？',
+    positiveText: '移出',
+    negativeText: '取消',
+    onPositiveClick: () => removeItem(row.id),
+  })
 }
 
 const removeItem = async (id: EntityId) => {
   if (!currentActivity.value) return
   await deleteItem(id)
   message.success('秒杀商品已移出')
-  items.value = await listItems(currentActivity.value.id)
+  await loadItems()
 }
 
 onMounted(load)
@@ -396,34 +559,50 @@ onMounted(load)
 
 <template>
   <div class="page">
-    <div class="page-head">
-      <div>
+    <!-- 页面标题 -->
+    <header class="page-head">
+      <div class="page-head-text">
         <h1 class="page-title">秒杀管理</h1>
         <p class="page-subtitle">维护秒杀活动、活动商品、秒杀库存和上下架状态。</p>
       </div>
-      <n-button type="primary" @click="openActivityDrawer()">
-        <template #icon>
-          <n-icon><AddOutline /></n-icon>
-        </template>
-        新建活动
-      </n-button>
-    </div>
-
-    <section class="panel panel-pad">
-      <div class="toolbar">
-        <n-select v-model:value="query.enabled" clearable :options="statusOptions" placeholder="活动状态" style="width: 160px" />
-        <n-button type="primary" @click="query.page = 1; load()">查询</n-button>
-        <n-button @click="query.enabled = null; query.page = 1; load()">重置</n-button>
-        <n-button :loading="loading" circle @click="load">
+      <div class="page-head-actions">
+        <n-button type="primary" @click="openActivityDrawer()">
           <template #icon>
-            <n-icon><RefreshOutline /></n-icon>
+            <n-icon><AddOutline /></n-icon>
           </template>
+          新建活动
         </n-button>
+      </div>
+    </header>
+
+    <!-- 搜索区 -->
+    <section class="panel search-panel">
+      <div class="search-row search-row--filters">
+        <n-select
+          v-model:value="query.enabled"
+          clearable
+          :options="statusOptions"
+          placeholder="全部状态"
+          class="filter-select"
+        />
+        <div class="search-row-actions">
+          <n-button type="primary" @click="query.page = 1; load()">查询</n-button>
+          <n-button @click="resetFilters">重置</n-button>
+        </div>
       </div>
     </section>
 
+    <!-- 活动表格 -->
     <section class="panel">
-      <n-data-table :loading="loading" :columns="columns" :data="rows" :bordered="false" />
+      <n-data-table
+        :loading="loading"
+        :columns="columns"
+        :data="rows"
+        :bordered="false"
+        :single-line="false"
+        :row-key="(row: SeckillActivity) => row.id"
+        :scroll-x="900"
+      />
       <div class="pagination-bar">
         <n-pagination
           v-model:page="query.page"
@@ -437,98 +616,182 @@ onMounted(load)
       </div>
     </section>
 
-    <n-drawer v-model:show="activityDrawer" :width="520">
-      <n-drawer-content :title="editingActivityId ? '编辑秒杀活动' : '新建秒杀活动'">
-        <n-form label-placement="top">
-          <n-form-item label="活动名称">
-            <n-input v-model:value="activityForm.name" />
-          </n-form-item>
-          <n-form-item label="活动时间">
-            <n-date-picker v-model:value="activityTime" type="datetimerange" clearable style="width: 100%" />
-          </n-form-item>
-          <n-form-item label="状态">
-            <n-select v-model:value="activityForm.enabled" :options="statusOptions" />
-          </n-form-item>
-          <n-form-item label="备注">
-            <n-input v-model:value="activityForm.remark" type="textarea" :autosize="{ minRows: 3 }" />
-          </n-form-item>
-        </n-form>
+    <!-- 活动编辑 Drawer -->
+    <n-drawer v-model:show="activityDrawer" :width="560" :auto-focus="false">
+      <n-drawer-content
+        :title="editingActivityId ? '编辑秒杀活动' : '新建秒杀活动'"
+        :native-scrollbar="false"
+        closable
+      >
+        <div class="drawer-form">
+          <n-form label-placement="top">
+            <div class="form-section">
+              <div class="form-section-title">基础信息</div>
+              <n-form-item label="活动名称" :required="true">
+                <n-input v-model:value="activityForm.name" placeholder="例如：8.18 全场秒杀" />
+              </n-form-item>
+              <n-form-item label="活动时间" :required="true">
+                <n-date-picker
+                  v-model:value="activityTime"
+                  type="datetimerange"
+                  clearable
+                  style="width: 100%"
+                />
+              </n-form-item>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">活动状态</div>
+              <n-form-item label="状态">
+                <n-select v-model:value="activityForm.enabled" :options="statusOptions" />
+              </n-form-item>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">备注</div>
+              <n-form-item label="活动说明">
+                <n-input
+                  v-model:value="activityForm.remark"
+                  type="textarea"
+                  :autosize="{ minRows: 3, maxRows: 6 }"
+                  placeholder="可填写活动规则、目标、注意事项等"
+                />
+              </n-form-item>
+            </div>
+          </n-form>
+        </div>
+
         <template #footer>
-          <n-space justify="end">
+          <div class="drawer-footer">
             <n-button @click="activityDrawer = false">取消</n-button>
-            <n-button type="primary" :loading="activitySaving" @click="saveActivity">保存</n-button>
-          </n-space>
+            <n-button type="primary" :loading="activitySaving" @click="saveActivity">
+              {{ editingActivityId ? '保存修改' : '保存活动' }}
+            </n-button>
+          </div>
         </template>
       </n-drawer-content>
     </n-drawer>
 
-    <n-drawer v-model:show="itemDrawer" :width="960">
-      <n-drawer-content :title="`活动商品 - ${currentActivity?.name || ''}`">
-        <n-button type="primary" style="margin-bottom: 12px" @click="openItemForm()">加入商品</n-button>
-        <n-data-table :columns="itemColumns" :data="items" :bordered="false" :render-empty="renderItemEmpty" />
+    <!-- 活动商品管理 Drawer -->
+    <n-drawer v-model:show="itemDrawer" :width="960" :auto-focus="false">
+      <n-drawer-content
+        :title="`活动商品 - ${currentActivity?.name || ''}`"
+        :native-scrollbar="false"
+        closable
+      >
+        <div class="items-toolbar">
+          <div class="items-toolbar-text">
+            管理该活动下的秒杀商品，包括加入新商品、调整秒杀价 / 库存、上下架与移出。
+          </div>
+          <n-button type="primary" @click="openItemForm()">
+            <template #icon>
+              <n-icon><AddOutline /></n-icon>
+            </template>
+            加入商品
+          </n-button>
+        </div>
+        <n-data-table
+          :loading="itemLoading"
+          :columns="itemColumns"
+          :data="items"
+          :bordered="false"
+          :single-line="false"
+          :render-empty="renderItemEmpty"
+          :scroll-x="920"
+        />
       </n-drawer-content>
     </n-drawer>
 
-    <n-drawer v-model:show="itemFormDrawer" :width="520">
-      <n-drawer-content :title="editingItemId ? '编辑秒杀商品' : '加入秒杀商品'">
-        <n-form label-placement="top">
-          <n-form-item label="从商品库存选择商品">
-            <n-select
-              v-model:value="itemForm.spuId"
-              filterable
-              remote
-              clearable
-              :loading="productLoading"
-              :options="productOptions"
-              placeholder="输入商品名称或编码搜索"
-              @search="searchProducts"
-              @update:value="handleProductSelect"
-              @focus="searchProducts('')"
-            />
-          </n-form-item>
-          <n-form-item label="选择 SKU">
-            <n-select
-              v-model:value="itemForm.skuId"
-              filterable
-              clearable
-              :disabled="!itemForm.spuId"
-              :loading="skuLoading"
-              :options="skuOptions"
-              placeholder="先选择商品，再选择 SKU 库存"
-              @update:value="handleSkuSelect"
-            />
-          </n-form-item>
-          <div v-if="selectedProduct || selectedSku" class="stock-hint">
-            <span v-if="selectedProduct">商品库存：{{ selectedProduct.inventory ?? 0 }}</span>
-            <span v-if="selectedSku">SKU 库存：{{ selectedSku.inventory ?? 0 }}</span>
-            <span v-if="selectedSku">原价：{{ money(selectedSku.price) }}</span>
-          </div>
-          <n-form-item label="秒杀价">
-            <n-input-number v-model:value="itemForm.seckillPrice" :min="0.01" style="width: 100%" />
-          </n-form-item>
-          <n-form-item label="秒杀库存">
-            <n-input-number
-              v-model:value="itemForm.seckillStock"
-              :min="0"
-              :max="selectedSkuInventory"
-              style="width: 100%"
-            />
-          </n-form-item>
-          <n-form-item label="限购数量">
-            <n-input-number v-model:value="itemForm.limitPerUser" :min="1" style="width: 100%" />
-          </n-form-item>
-          <n-form-item label="排序">
-            <n-input-number v-model:value="itemForm.sortOrder" :min="0" style="width: 100%" />
-          </n-form-item>
-          <n-form-item label="状态">
-            <n-select v-model:value="itemForm.status" :options="itemStatusOptions" />
-          </n-form-item>
-        </n-form>
+    <!-- 秒杀商品编辑 Drawer -->
+    <n-drawer v-model:show="itemFormDrawer" :width="560" :auto-focus="false">
+      <n-drawer-content
+        :title="editingItemId ? '编辑秒杀商品' : '加入秒杀商品'"
+        :native-scrollbar="false"
+        closable
+      >
+        <div class="drawer-form">
+          <n-form label-placement="top">
+            <div class="form-section">
+              <div class="form-section-title">选择商品</div>
+              <n-form-item label="从商品库存选择商品" :required="true">
+                <n-select
+                  v-model:value="itemForm.spuId"
+                  filterable
+                  remote
+                  clearable
+                  :loading="productLoading"
+                  :options="productOptions"
+                  placeholder="输入商品名称或编码搜索"
+                  @search="searchProducts"
+                  @update:value="handleProductSelect"
+                  @focus="searchProducts('')"
+                />
+              </n-form-item>
+              <n-form-item label="选择 SKU" :required="true">
+                <n-select
+                  v-model:value="itemForm.skuId"
+                  filterable
+                  clearable
+                  :disabled="!itemForm.spuId"
+                  :loading="skuLoading"
+                  :options="skuOptions"
+                  placeholder="先选择商品，再选择 SKU 库存"
+                  @update:value="handleSkuSelect"
+                />
+              </n-form-item>
+              <div v-if="selectedProduct || selectedSku" class="stock-hint">
+                <span v-if="selectedProduct">商品库存：{{ selectedProduct.inventory ?? 0 }}</span>
+                <span v-if="selectedSku">SKU 库存：{{ selectedSku.inventory ?? 0 }}</span>
+                <span v-if="selectedSku">原价：{{ money(selectedSku.price) }}</span>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">价格与库存</div>
+              <n-grid :cols="2" :x-gap="16">
+                <n-form-item-gi label="秒杀价" :required="true">
+                  <n-input-number
+                    v-model:value="itemForm.seckillPrice"
+                    :min="0.01"
+                    :precision="2"
+                    style="width: 100%"
+                  >
+                    <template #prefix>¥</template>
+                  </n-input-number>
+                </n-form-item-gi>
+                <n-form-item-gi label="秒杀库存" :required="true">
+                  <n-input-number
+                    v-model:value="itemForm.seckillStock"
+                    :min="0"
+                    :max="selectedSkuInventory"
+                    style="width: 100%"
+                  />
+                </n-form-item-gi>
+                <n-form-item-gi label="限购数量">
+                  <n-input-number v-model:value="itemForm.limitPerUser" :min="1" style="width: 100%" />
+                </n-form-item-gi>
+                <n-form-item-gi label="排序">
+                  <n-input-number v-model:value="itemForm.sortOrder" :min="0" style="width: 100%" />
+                </n-form-item-gi>
+              </n-grid>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">状态</div>
+              <n-form-item label="上下架状态">
+                <n-select v-model:value="itemForm.status" :options="itemStatusOptions" />
+              </n-form-item>
+            </div>
+          </n-form>
+        </div>
+
         <template #footer>
-          <n-space justify="end">
+          <div class="drawer-footer">
             <n-button @click="itemFormDrawer = false">取消</n-button>
-            <n-button type="primary" :loading="itemSaving" @click="saveItem">保存</n-button>
-          </n-space>
+            <n-button type="primary" :loading="itemSaving" @click="saveItem">
+              {{ editingItemId ? '保存修改' : '加入活动' }}
+            </n-button>
+          </div>
         </template>
       </n-drawer-content>
     </n-drawer>
@@ -536,56 +799,245 @@ onMounted(load)
 </template>
 
 <style scoped>
+/* —— 搜索区 —— */
+.search-panel {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.search-row--filters {
+  width: 100%;
+}
+
+.filter-select {
+  width: 200px;
+}
+
+.search-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* —— 活动列 —— */
+.activity-cell,
+.item-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.activity-name,
+.item-name {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-id,
+.item-sku {
+  font-family: var(--font-family-mono);
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-text {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+/* —— 价格列 —— */
+.price-cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  color: var(--color-text-primary);
+}
+
+.price-cell--muted {
+  color: var(--color-text-tertiary);
+}
+
+.price-symbol {
+  font-size: 12px;
+  font-weight: var(--font-weight-regular);
+}
+
+.price-amount {
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.price-amount--hot {
+  color: var(--color-primary);
+}
+
+/* —— 库存列 —— */
+.count-cell {
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.count-hot {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.count-muted {
+  color: var(--color-text-tertiary);
+}
+
+.stock-normal {
+  color: var(--color-text-primary);
+}
+
+.stock-warning {
+  color: var(--color-warning);
+}
+
+.stock-danger {
+  color: var(--color-danger);
+}
+
+/* —— 操作区 —— */
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+:deep(.dropdown-danger-item) {
+  color: var(--color-danger);
+}
+
+/* —— Drawer —— */
+.drawer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-section {
+  padding: 16px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.form-section:first-child {
+  border-top: none;
+  padding-top: 4px;
+}
+
+.form-section-title {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: 12px;
+  letter-spacing: 0.2px;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* —— 库存提示 —— */
+.stock-hint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 4px;
+}
+
+.stock-hint span {
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-tag);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-subtle);
+  font-size: 12px;
+}
+
+/* —— 活动商品 Drawer 工具栏 —— */
+.items-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--color-surface-subtle);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+}
+
+.items-toolbar-text {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* —— 空状态 —— */
+.item-empty {
+  padding: 56px 16px;
+  text-align: center;
+}
+
+.item-empty-title {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.item-empty-desc {
+  margin-top: 6px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+/* —— 分页 —— */
 .pagination-bar {
   display: flex;
   justify-content: flex-end;
   padding: 14px 16px 16px;
 }
 
-.id-cell {
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-  white-space: nowrap;
-}
+/* —— Responsive —— */
+@media (max-width: 640px) {
+  .search-row--filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
 
-.count-hot {
-  color: #0f766e;
-  font-weight: 700;
-}
+  .filter-select {
+    width: 100%;
+  }
 
-.count-muted {
-  color: #94a3b8;
-}
+  .search-row-actions {
+    margin-left: 0;
+  }
 
-.item-empty {
-  padding: 42px 16px;
-  text-align: center;
-}
-
-.item-empty-title {
-  color: #1f2937;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.item-empty-desc {
-  margin-top: 6px;
-  color: #64748b;
-  font-size: 13px;
-}
-
-.stock-hint {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: -4px 0 16px;
-}
-
-.stock-hint span {
-  padding: 4px 8px;
-  border: 1px solid #d8e7e3;
-  border-radius: 6px;
-  color: #0f766e;
-  background: #f1faf7;
-  font-size: 12px;
+  .items-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>

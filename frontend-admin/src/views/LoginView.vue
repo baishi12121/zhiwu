@@ -2,7 +2,8 @@
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { LockClosedOutline, PersonOutline, StorefrontOutline } from '@vicons/ionicons5'
+import { LockClosedOutline, PersonOutline } from '@vicons/ionicons5'
+import ShopIcon from '@/components/ShopIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
@@ -37,39 +38,76 @@ const submit = async () => {
 
 <template>
   <main class="login-page">
+    <!-- 左侧视觉区 -->
     <section class="login-visual">
       <div class="login-brand">
-        <n-icon size="36"><StorefrontOutline /></n-icon>
-        <span>植屋商城 Admin</span>
+        <span class="brand-icon">
+          <ShopIcon :size="22" />
+        </span>
+        <div class="brand-text">
+          <strong>知物商城</strong>
+          <span>Admin Console</span>
+        </div>
       </div>
-      <h1>把商品、活动和用户运营放在同一个清晰工作台。</h1>
-      <p>对接 mall-admin-service，支持销售总览、商品上下架、秒杀配置和用户状态管理。</p>
+
+      <div class="login-hero">
+        <h1>把商品、活动和用户运营<br />放在同一个清晰工作台。</h1>
+        <p>对接 mall-admin-service，支持销售总览、商品上下架、秒杀配置和用户状态管理。</p>
+      </div>
+
       <div class="signal-grid">
-        <div><strong>SPU/SKU</strong><span>库存与价格维护</span></div>
-        <div><strong>Seckill</strong><span>活动与商品编排</span></div>
-        <div><strong>Sales</strong><span>趋势与排行分析</span></div>
+        <div class="signal-card">
+          <strong>SPU / SKU</strong>
+          <span>库存与价格维护</span>
+        </div>
+        <div class="signal-card">
+          <strong>Seckill</strong>
+          <span>活动与商品编排</span>
+        </div>
+        <div class="signal-card">
+          <strong>Sales</strong>
+          <span>趋势与排行分析</span>
+        </div>
       </div>
     </section>
-    <section class="login-card">
-      <h2>管理员登录</h2>
-      <p>使用后台管理员账号进入控制台</p>
-      <n-form :model="form" :rules="rules" size="large" @submit.prevent="submit">
-        <n-form-item path="account">
-          <n-input v-model:value="form.account" placeholder="账号">
-            <template #prefix>
-              <n-icon><PersonOutline /></n-icon>
-            </template>
-          </n-input>
-        </n-form-item>
-        <n-form-item path="password">
-          <n-input v-model:value="form.password" type="password" show-password-on="click" placeholder="密码">
-            <template #prefix>
-              <n-icon><LockClosedOutline /></n-icon>
-            </template>
-          </n-input>
-        </n-form-item>
-        <n-button type="primary" block size="large" :loading="loading" @click="submit">登录后台</n-button>
-      </n-form>
+
+    <!-- 右侧登录卡片 -->
+    <section class="login-card-wrap">
+      <div class="login-card">
+        <div class="login-card-head">
+          <h2>管理员登录</h2>
+          <p>使用后台管理员账号进入控制台</p>
+        </div>
+
+        <n-form :model="form" :rules="rules" size="large" @submit.prevent="submit">
+          <n-form-item path="account">
+            <n-input v-model:value="form.account" placeholder="账号" :input-props="{ autocomplete: 'username' }">
+              <template #prefix>
+                <n-icon><PersonOutline /></n-icon>
+              </template>
+            </n-input>
+          </n-form-item>
+          <n-form-item path="password">
+            <n-input
+              v-model:value="form.password"
+              type="password"
+              show-password-on="click"
+              placeholder="密码"
+              :input-props="{ autocomplete: 'current-password' }"
+              @keyup.enter="submit"
+            >
+              <template #prefix>
+                <n-icon><LockClosedOutline /></n-icon>
+              </template>
+            </n-input>
+          </n-form-item>
+          <n-button type="primary" block size="large" :loading="loading" @click="submit">登录后台</n-button>
+        </n-form>
+
+        <div class="login-foot">
+          <span>知物商城后台 · 仅限授权人员访问</span>
+        </div>
+      </div>
     </section>
   </main>
 </template>
@@ -77,120 +115,210 @@ const submit = async () => {
 <style scoped>
 .login-page {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 420px;
+  grid-template-columns: minmax(0, 1fr) 440px;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 10% 20%, rgba(20, 184, 166, 0.18), transparent 30%),
-    linear-gradient(135deg, #eaf5f1 0%, #f7faf9 58%, #e7edf6 100%);
+  background: var(--color-bg);
 }
 
+/* —— 左侧视觉区 —— */
 .login-visual {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 8vw;
+  gap: 48px;
+  padding: 6vw 8vw;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  position: relative;
+  overflow: hidden;
+}
+
+.login-visual::before {
+  content: '';
+  position: absolute;
+  top: -120px;
+  right: -120px;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: var(--color-primary-subtle);
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .login-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: #0f766e;
-  font-size: 18px;
-  font-weight: 750;
+  gap: 12px;
+  position: relative;
 }
 
-h1 {
-  max-width: 740px;
-  margin: 42px 0 18px;
-  color: #111827;
-  font-size: 52px;
-  font-weight: 800;
-  line-height: 1.08;
+.brand-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  background: var(--color-primary-subtle);
+  color: var(--color-primary);
+  border-radius: var(--radius-card);
 }
 
-.login-visual p {
-  max-width: 560px;
-  margin: 0;
-  color: #536271;
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.brand-text strong {
+  color: var(--color-text-primary);
   font-size: 16px;
-  line-height: 1.8;
+  font-weight: var(--font-weight-semibold);
 }
 
+.brand-text span {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  letter-spacing: 0.4px;
+}
+
+.login-hero {
+  position: relative;
+}
+
+.login-hero h1 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 44px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1.15;
+  letter-spacing: -0.4px;
+}
+
+.login-hero p {
+  max-width: 520px;
+  margin: 20px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+/* —— 能力卡片 —— */
 .signal-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
   max-width: 680px;
-  margin-top: 42px;
+  position: relative;
 }
 
-.signal-grid div {
-  min-height: 92px;
-  padding: 16px;
-  border: 1px solid rgba(15, 118, 110, 0.18);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.66);
+.signal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
 }
 
-.signal-grid strong,
-.signal-grid span {
-  display: block;
+.signal-card strong {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
 }
 
-.signal-grid strong {
-  color: #0f766e;
-  font-size: 18px;
-}
-
-.signal-grid span {
-  margin-top: 8px;
-  color: #637083;
+.signal-card span {
+  color: var(--color-text-secondary);
   font-size: 13px;
+  line-height: 1.5;
+}
+
+/* —— 右侧登录区 —— */
+.login-card-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--color-bg);
 }
 
 .login-card {
-  align-self: center;
-  margin-right: 6vw;
-  padding: 34px;
-  border: 1px solid #dbe5e5;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 24px 70px rgba(26, 50, 60, 0.12);
+  width: 100%;
+  max-width: 380px;
+  padding: 36px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.04);
 }
 
-.login-card h2 {
+.login-card-head {
+  margin-bottom: 28px;
+}
+
+.login-card-head h2 {
   margin: 0;
-  color: #111827;
-  font-size: 28px;
+  color: var(--color-text-primary);
+  font-size: 24px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
 }
 
-.login-card p {
-  margin: 8px 0 28px;
-  color: #687789;
+.login-card-head p {
+  margin: 8px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 
+.login-foot {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.login-foot span {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+/* —— Responsive —— */
 @media (max-width: 980px) {
   .login-page {
     grid-template-columns: 1fr;
-    padding: 20px;
   }
 
   .login-visual {
-    padding: 28px 8px;
+    padding: 32px 24px;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
   }
 
-  h1 {
-    font-size: 34px;
+  .login-visual::before {
+    display: none;
+  }
+
+  .login-hero h1 {
+    font-size: 28px;
   }
 
   .signal-grid {
     grid-template-columns: 1fr;
+    max-width: none;
   }
 
+  .login-card-wrap {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 480px) {
   .login-card {
-    width: 100%;
-    margin: 0;
+    padding: 24px;
+  }
+
+  .login-hero h1 {
+    font-size: 24px;
   }
 }
 </style>
